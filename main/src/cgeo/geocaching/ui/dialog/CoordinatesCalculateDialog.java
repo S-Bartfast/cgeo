@@ -2,6 +2,7 @@ package cgeo.geocaching.ui.dialog;
 
 import static cgeo.geocaching.R.id.PlainFormat;
 import static cgeo.geocaching.R.id.coordTable;
+import static cgeo.geocaching.R.style.popup_dark;
 import static cgeo.geocaching.models.CalcState.ERROR_CHAR;
 
 import cgeo.geocaching.R;
@@ -16,18 +17,22 @@ import cgeo.geocaching.ui.CalculatorVariable;
 import cgeo.geocaching.ui.EditButton;
 import cgeo.geocaching.ui.JSONAble;
 
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.os.Bundle;
 import android.support.annotation.IdRes;
 import android.support.v4.BuildConfig;
 import android.support.v4.app.DialogFragment;
+import android.support.v4.media.RatingCompat;
 import android.support.v7.widget.GridLayout;
 import android.text.Editable;
+import android.text.Html;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.webkit.WebView;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -170,7 +175,15 @@ public class CoordinatesCalculateDialog extends DialogFragment implements ClickC
         }
     }
 
-    private class InputCancelListener implements View.OnClickListener {
+
+    private class CalculateHelpListener implements View.OnClickListener {
+        @Override
+        public void onClick(final View v) {
+            showHelp();
+        }
+    }
+
+    private class CalculateCancelListener implements View.OnClickListener {
         @Override
         public void onClick(final View v) {
             close();
@@ -341,6 +354,11 @@ public class CoordinatesCalculateDialog extends DialogFragment implements ClickC
         if (!noTitle) {
             dialog.setTitle(R.string.cache_coordinates);
         } else {
+            final ImageButton help = ButterKnife.findById(v, R.id.dialog_title_help);
+            if (help != null) {
+                help.setOnClickListener(new CalculateHelpListener());
+                help.setVisibility(View.VISIBLE);
+            }
             final TextView title = ButterKnife.findById(v, R.id.dialog_title_title);
             if (title != null) {
                 title.setText(R.string.cache_coordinates);
@@ -348,7 +366,7 @@ public class CoordinatesCalculateDialog extends DialogFragment implements ClickC
             }
             final ImageButton cancel = ButterKnife.findById(v, R.id.dialog_title_cancel);
             if (cancel != null) {
-                cancel.setOnClickListener(new InputCancelListener());
+                cancel.setOnClickListener(new CalculateCancelListener());
                 cancel.setVisibility(View.VISIBLE);
             }
             final ImageButton done = ButterKnife.findById(v, R.id.dialog_title_done);
@@ -1137,6 +1155,18 @@ public class CoordinatesCalculateDialog extends DialogFragment implements ClickC
 
         // Resetting the 'first' button causes all subsequent buttons to be reset as well
         bLatDeg[2].resetButton();
+    }
+
+    private void showHelp() {
+        WebView message = new WebView(getContext());
+        message.loadUrl("file:///android_asset/calculator_help.html");
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext(), popup_dark);
+        builder.setTitle("Calculator Help");
+        builder.setView(message);
+        builder.setPositiveButton("OK", null);
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
     }
 
     /**
