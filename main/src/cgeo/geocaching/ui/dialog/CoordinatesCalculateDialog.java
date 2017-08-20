@@ -1159,7 +1159,7 @@ public class CoordinatesCalculateDialog extends DialogFragment implements ClickC
 
     private void showHelp() {
         WebView message = new WebView(getContext());
-        message.loadUrl("file:///android_asset/calculator_help.html");
+        message.loadUrl(getString(R.string.help_calculator));
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext(), popup_dark);
         builder.setTitle("Calculator Help");
         builder.setView(message);
