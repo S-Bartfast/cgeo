@@ -10,7 +10,7 @@
     <ImageButton
         android:id="@+id/dialog_title_help"
         style="@style/action_bar_action"
-        android:src="@drawable/ic_menu_help_holo_dark"
+        android:src="@drawable/settings_info_icon_white"
         android:visibility="gone" />
 
     <View style="@style/action_bar_separator"
