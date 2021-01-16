@@ -1,10 +1,9 @@
 package cgeo.geocaching.location;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import android.os.Bundle;
 
 import junit.framework.TestCase;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class GeopointAndroidTest extends TestCase {
 
@@ -13,7 +12,7 @@ public class GeopointAndroidTest extends TestCase {
         final String key = "geopoint";
         final Bundle bundle = new Bundle();
         bundle.putParcelable(key, gp);
-        assertThat(bundle.getParcelable(key)).isEqualTo(gp);
+        assertThat(bundle.<Geopoint>getParcelable(key)).isEqualTo(gp);
     }
 
 }

@@ -1,7 +1,5 @@
 package cgeo.geocaching.models;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.connector.trackable.TrackableBrand;
 import cgeo.geocaching.log.LogEntry;
 import cgeo.geocaching.log.LogType;
@@ -11,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Date;
 
 import junit.framework.TestCase;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class TrackableTest extends TestCase {
 
@@ -65,6 +64,9 @@ public class TrackableTest extends TestCase {
         trackable2.setName("name");
         trackable2.setType("type");
         trackable2.setReleased(new Date());
+        trackable2.setLogDate(new Date());
+        trackable2.setLogGuid("CC1144");
+        trackable2.setLogType(LogType.DISCOVERED_IT);
         trackable2.setDistance(100);
         trackable2.setOrigin("origin");
         trackable2.setOwner("owner");
@@ -95,6 +97,9 @@ public class TrackableTest extends TestCase {
         assertThat(trackable1.getName()).isEqualTo(trackable2.getName());
         assertThat(trackable1.getType()).isEqualTo(trackable2.getType());
         assertThat(trackable1.getReleased()).isEqualTo(trackable2.getReleased());
+        assertThat(trackable1.getLogDate()).isEqualTo(trackable2.getLogDate());
+        assertThat(trackable1.getLogType()).isEqualTo(trackable2.getLogType());
+        assertThat(trackable1.getLogGuid()).isEqualTo(trackable2.getLogGuid());
         assertThat(trackable1.getDistance()).isEqualTo(trackable2.getDistance());
         assertThat(trackable1.getOrigin()).isEqualTo(trackable2.getOrigin());
         assertThat(trackable1.getOwner()).isEqualTo(trackable2.getOwner());

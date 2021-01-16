@@ -1,13 +1,12 @@
 package cgeo.geocaching.connector.trackable;
 
-import org.xml.sax.InputSource;
-
-import java.util.List;
-
 import cgeo.geocaching.models.Trackable;
 import cgeo.geocaching.test.AbstractResourceInstrumentationTestCase;
 import cgeo.geocaching.test.R;
 
+import java.util.List;
+
+import org.xml.sax.InputSource;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
 /**
@@ -38,6 +37,9 @@ public class GeokretyConnectorTest extends AbstractResourceInstrumentationTestCa
         assertThat(getConnector().getTrackableCodeFromUrl("https://www.geokrety.org/konkret.php?id=46464")).isEqualTo("GKB580");
         assertThat(getConnector().getTrackableCodeFromUrl("http://geokrety.org/konkret.php?id=46465")).isEqualTo("GKB581");
         assertThat(getConnector().getTrackableCodeFromUrl("https://geokrety.org/konkret.php?id=46465")).isEqualTo("GKB581");
+
+        assertThat(getConnector().getTrackableCodeFromUrl("https://api.geokrety.org/gk/46464")).isEqualTo("GKB580");
+        assertThat(getConnector().getTrackableCodeFromUrl("https://api.geokrety.org/gk/46464/details")).isEqualTo("GKB580");
     }
 
     public static void testGeocode() throws Exception {
@@ -76,15 +78,13 @@ public class GeokretyConnectorTest extends AbstractResourceInstrumentationTestCa
         // * GK website always return list in the same order
         final List<Trackable> trackables = new GeokretyConnector().searchTrackables("OX5BRQK");
         assertThat(trackables).hasSize(2);
-        assertThat(trackables.get(0).getName()).isEqualTo("c:geo Two");
-        assertThat(trackables.get(1).getName()).isEqualTo("c:geo One");
+        assertThat(trackables).extracting("name").containsOnly("c:geo One", "c:geo Two");
     }
 
     public void testGetIconBrand() throws Exception {
         final List<Trackable> trackables = GeokretyParser.parse(new InputSource(getResourceStream(R.raw.geokret141_xml)));
         assertThat(trackables).hasSize(2);
-        assertThat(trackables.get(0).getIconBrand()).isEqualTo(TrackableBrand.GEOKRETY.getIconResource());
-        assertThat(trackables.get(1).getIconBrand()).isEqualTo(TrackableBrand.GEOKRETY.getIconResource());
+        assertThat(trackables).extracting("brand").containsOnly(TrackableBrand.GEOKRETY, TrackableBrand.GEOKRETY);
     }
 
     private static GeokretyConnector getConnector() {

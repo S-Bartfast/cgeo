@@ -5,18 +5,20 @@ import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.IConnector;
 import cgeo.geocaching.list.StoredList;
 import cgeo.geocaching.settings.Settings;
-
-import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
+import cgeo.geocaching.utils.FileUtils;
 
 import android.app.Activity;
 import android.content.Intent;
+
+import androidx.annotation.NonNull;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class GpxFileListActivity extends AbstractFileListActivity<GPXListAdapter> {
 
@@ -26,7 +28,7 @@ public class GpxFileListActivity extends AbstractFileListActivity<GPXListAdapter
 
     private static String[] supportedFileTypes() {
         final ArrayList<String> result = new ArrayList<>();
-        for (final String dotExtension : Arrays.asList(GPXImporter.GPX_FILE_EXTENSION, GPXImporter.LOC_FILE_EXTENSION, GPXImporter.COMPRESSED_GPX_FILE_EXTENSION, GPXImporter.ZIP_FILE_EXTENSION)) {
+        for (final String dotExtension : Arrays.asList(FileUtils.GPX_FILE_EXTENSION, FileUtils.LOC_FILE_EXTENSION, FileUtils.COMPRESSED_GPX_FILE_EXTENSION, FileUtils.ZIP_FILE_EXTENSION)) {
             result.add(StringUtils.substringAfter(dotExtension, "."));
         }
         return result.toArray(new String[result.size()]);
@@ -51,7 +53,7 @@ public class GpxFileListActivity extends AbstractFileListActivity<GPXListAdapter
     @Override
     protected boolean filenameBelongsToList(@NonNull final String filename) {
         if (super.filenameBelongsToList(filename)) {
-            if (StringUtils.endsWithIgnoreCase(filename, GPXImporter.ZIP_FILE_EXTENSION)) {
+            if (StringUtils.endsWithIgnoreCase(filename, FileUtils.ZIP_FILE_EXTENSION)) {
                 for (final IConnector connector : ConnectorFactory.getConnectors()) {
                     if (connector.isZippedGPXFile(filename)) {
                         return true;

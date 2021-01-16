@@ -10,13 +10,14 @@ import cgeo.geocaching.settings.Settings;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
 
 public class MapOptions {
 
-    public MapMode mapMode;
+    public final MapMode mapMode;
     public boolean isLiveEnabled;
     public boolean isStoredEnabled;
     public SearchResult searchResult;
@@ -37,6 +38,9 @@ public class MapOptions {
             waypointType = (WaypointType) extras.get(Intents.EXTRA_WPTTYPE);
             mapState = extras.getParcelable(Intents.EXTRA_MAPSTATE);
             title = extras.getString(Intents.EXTRA_TITLE);
+            if (null != coords && null == waypointType) {
+                waypointType = WaypointType.WAYPOINT;
+            }
         } else {
             mapMode = MapMode.LIVE;
             isStoredEnabled = true;
@@ -56,6 +60,14 @@ public class MapOptions {
 
     public MapOptions() {
         mapMode = MapMode.LIVE;
+        isStoredEnabled = true;
+        isLiveEnabled = Settings.isLiveMap();
+    }
+
+    public MapOptions(final Geopoint coords) {
+        mapMode = MapMode.LIVE;
+        this.coords = coords;
+        this.waypointType = WaypointType.WAYPOINT;
         isStoredEnabled = true;
         isLiveEnabled = Settings.isLiveMap();
     }

@@ -1,21 +1,19 @@
 package cgeo.geocaching.utils;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import io.reactivex.Observable;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Action;
-import io.reactivex.functions.Function;
-import io.reactivex.subjects.PublishSubject;
-import junit.framework.TestCase;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.subjects.PublishSubject;
+import org.junit.Test;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
-public class RxUtilsTest extends TestCase {
+public class RxUtilsTest {
 
-    public static void testRememberLast() {
+    @Test
+    public void testRememberLast() {
         final PublishSubject<String> rawObservable = PublishSubject.create();
         final Observable<String> observable = RxUtils.rememberLast(rawObservable, "initial");
 
@@ -36,14 +34,12 @@ public class RxUtilsTest extends TestCase {
         assertThat(observable.blockingFirst()).isEqualTo("first");
     }
 
-    public static void testObservableCache() {
+    @Test
+    public void testObservableCache() {
         final AtomicInteger counter = new AtomicInteger(0);
-        final RxUtils.ObservableCache<String, Integer> cache = new RxUtils.ObservableCache<>(new Function<String, Observable<Integer>>() {
-            @Override
-            public Observable<Integer> apply(final String s) {
-                counter.incrementAndGet();
-                return Observable.just(s.length());
-            }
+        final RxUtils.ObservableCache<String, Integer> cache = new RxUtils.ObservableCache<>(s -> {
+            counter.incrementAndGet();
+            return Observable.just(s.length());
         });
         assertThat(cache.get("a").blockingSingle()).isEqualTo(1);
         assertThat(counter.get()).isEqualTo(1);
@@ -57,14 +53,10 @@ public class RxUtilsTest extends TestCase {
         assertThat(counter.get()).isEqualTo(2);
     }
 
-    public static void testDelayedUnsubscription() {
+    @Test
+    public void testDelayedUnsubscription() {
         final AtomicBoolean unsubscribed = new AtomicBoolean(false);
-        Observable.never().doOnDispose(new Action() {
-            @Override
-            public void run() {
-                unsubscribed.set(true);
-            }
-        }).lift(new RxUtils.DelayedUnsubscription<>(100, TimeUnit.MILLISECONDS)).subscribe().dispose();
+        Observable.never().doOnDispose(() -> unsubscribed.set(true)).lift(new RxUtils.DelayedUnsubscription<>(100, TimeUnit.MILLISECONDS)).subscribe().dispose();
         assertThat(unsubscribed.get()).isFalse();
         try {
             Thread.sleep(200);

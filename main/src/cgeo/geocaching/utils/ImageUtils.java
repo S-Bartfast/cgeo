@@ -15,15 +15,15 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.media.ExifInterface;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.text.Html;
-import android.text.Html.ImageGetter;
 import android.util.Base64;
 import android.util.Base64InputStream;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.text.HtmlCompat;
+import androidx.exifinterface.media.ExifInterface;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -32,6 +32,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.ref.WeakReference;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,10 +43,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.functions.Consumer;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -56,6 +58,8 @@ public final class ImageUtils {
             ExifInterface.ORIENTATION_ROTATE_180,
             ExifInterface.ORIENTATION_ROTATE_270
     };
+
+    private static final AtomicLong IMG_COUNTER = new AtomicLong(0);
 
     private static final int[] ROTATION = { 90, 180, 270 };
     private static final int MAX_DISPLAY_IMAGE_XY = 800;
@@ -105,7 +109,7 @@ public final class ImageUtils {
     }
 
     /**
-     * Scales a bitmap to the given bounds if it is larger, otherwise returns the original bitmap.
+     * Scales a bitmap to the given bounds if it is larger, otherwise returns the original bitmap (except when "force" is set to true)
      *
      * @param image
      *            The bitmap to scale
@@ -117,9 +121,12 @@ public final class ImageUtils {
         Bitmap result = image;
         int width = image.getWidth();
         int height = image.getHeight();
+        final int realMaxWidth = maxWidth <= 0 ? width : maxWidth;
+        final int realMaxHeight = maxHeight <= 0 ? height : maxHeight;
+        final boolean imageTooLarge = width > realMaxWidth || height > realMaxHeight;
 
-        if (width > maxWidth || height > maxHeight) {
-            final double ratio = Math.min((double) maxHeight / (double) height, (double) maxWidth / (double) width);
+        if (imageTooLarge) {
+            final double ratio = Math.min((double) realMaxHeight / (double) height, (double) realMaxWidth / (double) width);
             width = (int) Math.ceil(width * ratio);
             height = (int) Math.ceil(height * ratio);
             result = Bitmap.createScaledBitmap(image, width, height, true);
@@ -127,6 +134,7 @@ public final class ImageUtils {
 
         final BitmapDrawable resultDrawable = new BitmapDrawable(app.getResources(), result);
         resultDrawable.setBounds(new Rect(0, 0, width, height));
+
         return resultDrawable;
     }
 
@@ -143,30 +151,60 @@ public final class ImageUtils {
      *            Path to store to
      */
     public static void storeBitmap(final Bitmap bitmap, final Bitmap.CompressFormat format, final int quality, final String pathOfOutputImage) {
+        BufferedOutputStream bos = null;
         try {
             final FileOutputStream out = new FileOutputStream(pathOfOutputImage);
-            final BufferedOutputStream bos = new BufferedOutputStream(out);
+            bos = new BufferedOutputStream(out);
             bitmap.compress(format, quality, bos);
             bos.flush();
-            bos.close();
         } catch (final IOException e) {
             Log.e("ImageHelper.storeBitmap", e);
+        } finally {
+            IOUtils.closeQuietly(bos);
+        }
+    }
+
+    public static class ScaleImageResult {
+        final String filename;
+        final int width;
+        final int height;
+
+        public ScaleImageResult(final String filename, final int width, final int height) {
+            this.filename = filename;
+            this.width = width;
+            this.height = height;
+        }
+
+        public String getFilename() {
+            return filename;
+        }
+
+        public int getWidth() {
+            return width;
+        }
+
+        public int getHeight() {
+            return height;
         }
     }
 
     /**
-     * Scales an image to the desired bounds and encodes to file.
+     * This method will COPY the given image file to a new location, sample it down, scales it to given bounds
+     * and remove EXIF information.
      *
-     * @param filePath
-     *            Image to read
-     * @param maxXY
-     *            bounds
-     * @return filename and path, <tt>null</tt> if something fails
+     * Also, if wanted, it scales an image to the desired bounds.
+     *
+     * @param filePath Image to read
+     * @param maxXY bounds. If <= 0 then no scaling will happen. Rest depends on parameter 'forceCopy'
+     * @param forceCopy if maxXY is <=0 but forceCopy is true, then image will be copied, sampled down and EXIF removed nevertheless
+     * @param deleteOldInSameFolder if true: if we make a copy AND that copy is in the same folder then the old file is deleted
+     * @return scale image result with filename and size, <tt>null</tt> if something fails
      */
     @Nullable
-    public static String readScaleAndWriteImage(@NonNull final String filePath, final int maxXY) {
-        if (maxXY <= 0) {
-            return filePath;
+    public static ScaleImageResult readScaleAndWriteImage(@NonNull final String filePath, final int maxXY, final boolean forceCopy, final boolean deleteOldInSameFolder) {
+        if (maxXY <= 0 && !forceCopy) {
+            final BitmapFactory.Options sizeOnlyOptions = getBitmapSizeOptions(filePath);
+            return new ScaleImageResult(filePath, sizeOnlyOptions.outWidth, sizeOnlyOptions.outHeight);
         }
         final Bitmap image = readDownsampledImage(filePath, maxXY, maxXY);
         if (image == null) {
@@ -182,22 +220,24 @@ public final class ImageUtils {
 
         final BitmapDrawable scaledImage = scaleBitmapTo(image, maxXY, maxXY);
         storeBitmap(scaledImage.getBitmap(), Bitmap.CompressFormat.JPEG, 75, uploadFilename);
-        return uploadFilename;
+        if (deleteOldInSameFolder && tempImageFile.getParentFile().equals(new File(filePath).getParentFile())) {
+            //previous file is in same folder and we made a copy -> delete outdated older file
+            new File(filePath).delete();
+        }
+        return new ScaleImageResult(uploadFilename, scaledImage.getBitmap().getWidth(), scaledImage.getBitmap().getHeight());
     }
 
     /**
      * Reads and scales an image file with downsampling in one step to prevent memory consumption.
      *
-     * @param filePath
-     *            The file to read
-     * @param maxX
-     *            The desired width
-     * @param maxY
-     *            The desired height
+     * @param filePath The file to read
+     * @param maxX The desired width. If <= 0 then actual bitmap width is used
+     * @param maxY The desired height. If <= 0 then actual bitmap height is used
      * @return Bitmap the image or null if file can't be read
      */
     @Nullable
-    public static Bitmap readDownsampledImage(@NonNull final String filePath, final int maxX, final int maxY) {
+    private static Bitmap readDownsampledImage(@NonNull final String filePath, final int maxX, final int maxY) {
+
         int orientation = ExifInterface.ORIENTATION_NORMAL;
         try {
             final ExifInterface exif = new ExifInterface(filePath);
@@ -205,16 +245,15 @@ public final class ImageUtils {
         } catch (final IOException e) {
             Log.e("ImageUtils.readDownsampledImage", e);
         }
-        final BitmapFactory.Options sizeOnlyOptions = new BitmapFactory.Options();
-        sizeOnlyOptions.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(filePath, sizeOnlyOptions);
+        final BitmapFactory.Options sizeOnlyOptions = getBitmapSizeOptions(filePath);
         final int myMaxXY = Math.max(sizeOnlyOptions.outHeight, sizeOnlyOptions.outWidth);
-        final int maxXY = Math.max(maxX, maxY);
-        final int sampleSize = myMaxXY / maxXY;
+        final int maxXY = Math.max(maxX <= 0 ? sizeOnlyOptions.outWidth : maxX, maxY <= 0 ? sizeOnlyOptions.outHeight : maxY);
+        final int sampleSize = maxXY <= 0 ? 1 : myMaxXY / maxXY;
         final BitmapFactory.Options sampleOptions = new BitmapFactory.Options();
         if (sampleSize > 1) {
             sampleOptions.inSampleSize = sampleSize;
         }
+
         final Bitmap decodedImage = BitmapFactory.decodeFile(filePath, sampleOptions);
         if (decodedImage != null) {
             for (int i = 0; i < ORIENTATIONS.length; i++) {
@@ -226,6 +265,24 @@ public final class ImageUtils {
             }
         }
         return decodedImage;
+    }
+
+    @NonNull
+    private static BitmapFactory.Options getBitmapSizeOptions(@NonNull final String filePath) {
+        final BitmapFactory.Options sizeOnlyOptions = new BitmapFactory.Options();
+        sizeOnlyOptions.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(filePath, sizeOnlyOptions);
+
+        return sizeOnlyOptions;
+    }
+
+    @Nullable
+    public static ImmutablePair<Integer, Integer> getImageSize(@Nullable final File imgFile) {
+        if (imgFile == null || !imgFile.isFile()) {
+            return null;
+        }
+        final Bitmap bm = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+        return bm == null ? null : new ImmutablePair<>(bm.getWidth(), bm.getHeight());
     }
 
     /** Create a File for saving an image or video
@@ -249,8 +306,22 @@ public final class ImageUtils {
         }
 
         // Create a media file name
-        final String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-        return new File(mediaStorageDir.getPath() + File.separator + "IMG_" + timeStamp + ".jpg");
+        final String timeStamp = new SimpleDateFormat("yyMMdd-HHmmss", Locale.US).format(new Date());
+        return new File(mediaStorageDir.getPath() + File.separator + "IMG" + IMG_COUNTER.addAndGet(1) + "-" + timeStamp + ".jpg");
+    }
+
+    @NonNull
+    public static String getRelativePathToOutputImageDir(final File file) {
+        final String basePath = LocalStorage.getLogPictureDirectory().getAbsolutePath();
+        String filePath = file.getAbsolutePath();
+        if (filePath.startsWith(basePath)) {
+            filePath = filePath.substring(basePath.length());
+        }
+
+        if (filePath.length() > 1 && (filePath.charAt(0) == '\\' || filePath.charAt(0) == '/')) {
+            filePath = filePath.substring(1);
+        }
+        return filePath;
     }
 
     @Nullable
@@ -307,7 +378,7 @@ public final class ImageUtils {
     public static void decodeBase64ToStream(final String inString, final OutputStream out) throws IOException {
         Base64InputStream in = null;
         try {
-            in = new Base64InputStream(new ByteArrayInputStream(inString.getBytes(TextUtils.CHARSET_ASCII)), Base64.DEFAULT);
+            in = new Base64InputStream(new ByteArrayInputStream(inString.getBytes(StandardCharsets.US_ASCII)), Base64.DEFAULT);
             IOUtils.copy(in, out);
         } finally {
             IOUtils.closeQuietly(in);
@@ -331,18 +402,15 @@ public final class ImageUtils {
             urls.add(image.getUrl());
         }
         for (final String text: htmlText) {
-            Html.fromHtml(StringUtils.defaultString(text), new ImageGetter() {
-                @Override
-                public Drawable getDrawable(final String source) {
-                    if (!urls.contains(source) && canBeOpenedExternally(source)) {
-                        images.add(new Image.Builder()
-                                .setUrl(source)
-                                .setTitle(StringUtils.defaultString(geocode))
-                                .build());
-                        urls.add(source);
-                    }
-                    return null;
+            HtmlCompat.fromHtml(StringUtils.defaultString(text), HtmlCompat.FROM_HTML_MODE_LEGACY, source -> {
+                if (!urls.contains(source) && canBeOpenedExternally(source)) {
+                    images.add(new Image.Builder()
+                            .setUrl(source)
+                            .setTitle(StringUtils.defaultString(geocode))
+                            .build());
+                    urls.add(source);
                 }
+                return null;
             }, null);
         }
     }
@@ -361,12 +429,7 @@ public final class ImageUtils {
         private static final Object lock = new Object(); // Used to lock the queue to determine if a refresh needs to be scheduled
         private static final LinkedBlockingQueue<ImmutablePair<ContainerDrawable, Drawable>> REDRAW_QUEUE = new LinkedBlockingQueue<>();
         private static final Set<TextView> VIEWS = new HashSet<>();  // Modified only on the UI thread, from redrawQueuedDrawables
-        private static final Runnable REDRAW_QUEUED_DRAWABLES = new Runnable() {
-            @Override
-            public void run() {
-                redrawQueuedDrawables();
-            }
-        };
+        private static final Runnable REDRAW_QUEUED_DRAWABLES = ContainerDrawable::redrawQueuedDrawables;
 
         private Drawable drawable;
         protected final WeakReference<TextView> viewRef;

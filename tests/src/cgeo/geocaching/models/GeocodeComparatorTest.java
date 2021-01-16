@@ -1,19 +1,19 @@
 package cgeo.geocaching.models;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.sorting.GeocodeComparator;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.TestCase;
+import org.junit.Test;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
-public class GeocodeComparatorTest extends TestCase {
+public class GeocodeComparatorTest {
 
+    @Test
     public void testSomething() {
         final List<Geocache> caches = new ArrayList<>();
         caches.add(createGeocache("GC1ABCD"));

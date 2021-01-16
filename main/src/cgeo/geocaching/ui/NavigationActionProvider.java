@@ -5,9 +5,10 @@ import cgeo.geocaching.activity.INavigationSource;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.support.v4.view.ActionProvider;
 import android.view.LayoutInflater;
 import android.view.View;
+
+import androidx.core.view.ActionProvider;
 
 /**
  * Action provider showing the compass icon, and reacting to normal click (primary navigation) and long click (secondary
@@ -47,21 +48,11 @@ public class NavigationActionProvider extends ActionProvider {
 
             final View navItem = view.findViewById(R.id.default_navigation_action);
 
-            navItem.setOnClickListener(new View.OnClickListener() {
+            navItem.setOnClickListener(v -> navigationSource.startDefaultNavigation());
 
-                @Override
-                public void onClick(final View v) {
-                    navigationSource.startDefaultNavigation();
-                }
-            });
-
-            navItem.setOnLongClickListener(new View.OnLongClickListener() {
-
-                @Override
-                public boolean onLongClick(final View v) {
-                    navigationSource.startDefaultNavigation2();
-                    return true;
-                }
+            navItem.setOnLongClickListener(v -> {
+                navigationSource.startDefaultNavigation2();
+                return true;
             });
         }
 

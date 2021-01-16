@@ -2,7 +2,7 @@ package cgeo.geocaching.location;
 
 import cgeo.geocaching.utils.MatcherWrapper;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -31,22 +31,22 @@ public class UTMPoint {
     /**
      * The northing component of the coordinate.
      */
-    private double northing;
+    private final double northing;
 
     /**
      * The easting component of the coordinate.
      */
-    private double easting;
+    private final double easting;
 
     /**
      * The zone number of the coordinate, must be between 1 and 60.
      */
-    private int zoneNumber;
+    private final int zoneNumber;
 
     /**
      * A-Z
      */
-    private char zoneLetter;
+    private final char zoneLetter;
 
     //                                                  ( 1   )(  2    )       (  3  )       (         4       )       (        5        )
     static final Pattern PATTERN_UTM = Pattern.compile("(^|\\s)(\\d\\d?)[ \\t]*([A-Z])[\\sE]+(\\d+(?:[.,]\\d+)?)[\\sN]+(\\d+(?:[.,]\\d+)?)", Pattern.CASE_INSENSITIVE);
@@ -120,6 +120,7 @@ public class UTMPoint {
      * @return String representation
      */
     @Override
+    @NonNull
     public String toString() {
         return String.format(Locale.getDefault(), "%d%c E %d N %d", zoneNumber, zoneLetter, Math.round(easting), Math.round(northing));
     }

@@ -1,7 +1,8 @@
 package cgeo.geocaching.ui.recyclerview;
 
-import android.support.v7.widget.RecyclerView;
 import android.view.View;
+
+import androidx.recyclerview.widget.RecyclerView;
 
 import butterknife.ButterKnife;
 
@@ -14,17 +15,6 @@ public abstract class AbstractRecyclerViewHolder extends RecyclerView.ViewHolder
     protected AbstractRecyclerViewHolder(final View view) {
         super(view);
         ButterKnife.bind(this, view);
-    }
-
-    /**
-     * remember item position at view for retrieval in listeners
-     */
-    protected void setItemPosition(final int position) {
-        itemView.setTag(position);
-    }
-
-    public int getItemPosition() {
-        return (int) itemView.getTag();
     }
 
 }

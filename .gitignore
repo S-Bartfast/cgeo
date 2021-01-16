@@ -34,11 +34,17 @@ private.properties
 main/build/
 mapswithme-api/build/
 build
+build-cache/
 # build system user specific files
 main/gradle.properties
 
-# IDEA
+# ignore IDEA settings
 .idea/
+# but have a common checkstyle configuration
+!.idea/checkstyle-idea.xml
 *.iml
+
+# ignore AS layout captures
+captures/
 
 main/usage.txt

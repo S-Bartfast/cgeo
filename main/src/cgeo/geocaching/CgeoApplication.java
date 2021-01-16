@@ -1,15 +1,12 @@
 package cgeo.geocaching;
 
 import cgeo.geocaching.network.Cookies;
-import cgeo.geocaching.sensors.Sensors;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.storage.DataStore;
-import cgeo.geocaching.utils.AndroidRxUtils;
 import cgeo.geocaching.utils.Log;
 import cgeo.geocaching.utils.OOMDumpingUncaughtExceptionHandler;
 
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.app.Application;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
@@ -17,13 +14,12 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.UserManager;
-import android.support.annotation.NonNull;
 import android.view.ViewConfiguration;
+
+import androidx.annotation.NonNull;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-
-import com.squareup.leakcanary.LeakCanary;
 
 public class CgeoApplication extends Application {
 
@@ -47,11 +43,10 @@ public class CgeoApplication extends Application {
 
         OOMDumpingUncaughtExceptionHandler.installUncaughtExceptionHandler();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.O) {
             fixUserManagerMemoryLeak();
         }
 
-        LeakCanary.install(this);
         showOverflowMenu();
 
         initApplicationLocale();
@@ -61,19 +56,12 @@ public class CgeoApplication extends Application {
 
         // Restore cookies
         Cookies.restoreCookies();
-
-        final Sensors sensors = Sensors.getInstance();
-        sensors.setupGeoDataObservables(Settings.useGooglePlayServices(), Settings.useLowPowerMode());
-        sensors.setupDirectionObservable();
-
-        // Attempt to acquire an initial location before any real activity happens.
-        sensors.geoDataObservable(true).subscribeOn(AndroidRxUtils.looperCallbacksScheduler).take(1).subscribe();
     }
 
     /**
      * https://code.google.com/p/android/issues/detail?id=173789
+     * introduced with JELLY_BEAN_MR2 / fixed in October 2016
      */
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     private void fixUserManagerMemoryLeak() {
         try {
             // invoke UserManager.get() via reflection
@@ -88,7 +76,7 @@ public class CgeoApplication extends Application {
     }
 
     @Override
-    public void onConfigurationChanged(final Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull final Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
         initApplicationLocale();

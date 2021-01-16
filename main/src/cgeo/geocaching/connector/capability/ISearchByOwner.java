@@ -3,7 +3,7 @@ package cgeo.geocaching.connector.capability;
 import cgeo.geocaching.SearchResult;
 import cgeo.geocaching.connector.IConnector;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 /**
  * Connector capability to search online by owner name. Implement this in a {@link IConnector} to take part in the
@@ -11,5 +11,5 @@ import android.support.annotation.NonNull;
  *
  */
 public interface ISearchByOwner extends IConnector {
-    SearchResult searchByOwner(@NonNull final String owner);
+    SearchResult searchByOwner(@NonNull String owner);
 }

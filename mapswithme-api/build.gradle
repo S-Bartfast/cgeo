@@ -3,17 +3,24 @@ apply plugin: 'android-library'
 android {
 
   // Define these properties in the gradle.properties file in the root project folder
-  compileSdkVersion 23
-  buildToolsVersion project.buildToolsVersion
+  compileSdkVersion 28
 
   defaultConfig {
-    minSdkVersion 9
-    targetSdkVersion 19
+    minSdkVersion 21
+    targetSdkVersion 28
   }
 
   sourceSets.main {
     manifest.srcFile 'AndroidManifest.xml'
     java.srcDirs = ['src']
     res.srcDirs = ['res']
+  }
+
+  lintOptions {
+    // generally we accept lint errors when building
+    abortOnError false
+
+    // abort release builds in case of FATAL errors
+    checkReleaseBuilds true
   }
 }

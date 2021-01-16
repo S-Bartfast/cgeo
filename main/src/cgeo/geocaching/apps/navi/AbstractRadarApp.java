@@ -6,7 +6,8 @@ import cgeo.geocaching.models.Waypoint;
 
 import android.content.Context;
 import android.content.Intent;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 abstract class AbstractRadarApp extends AbstractPointNavigationApp {
 
@@ -45,5 +46,5 @@ abstract class AbstractRadarApp extends AbstractPointNavigationApp {
         context.startActivity(intent);
     }
 
-    protected abstract void addCoordinates(final Intent intent, final Geopoint point);
+    protected abstract void addCoordinates(Intent intent, Geopoint point);
 }

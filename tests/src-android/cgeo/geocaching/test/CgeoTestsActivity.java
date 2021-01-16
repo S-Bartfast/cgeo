@@ -5,7 +5,6 @@ import android.content.ComponentName;
 import android.content.pm.InstrumentationInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.text.Html;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -13,12 +12,12 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.text.HtmlCompat;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
-
-import butterknife.ButterKnife;
 
 public class CgeoTestsActivity extends Activity {
     private static final String TAG = CgeoTestsActivity.class.getName();
@@ -51,7 +50,7 @@ public class CgeoTestsActivity extends Activity {
             final String line = values[0];
             final boolean isAtBottom = scrollView.isAtBottom();
             if (!TextUtils.isEmpty(line)) {
-                logView.append(Html.fromHtml("<font color=\"" + color(line) + "\">" + line + "</font><br/>"));
+                logView.append(HtmlCompat.fromHtml("<font color=\"" + color(line) + "\">" + line + "</font><br/>", HtmlCompat.FROM_HTML_MODE_LEGACY));
                 if (isAtBottom) {
                     scrollView.scrollTo(0, logView.getBottom());
                 }
@@ -93,8 +92,8 @@ public class CgeoTestsActivity extends Activity {
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.cgeo_tests_activity);
-        logView = ButterKnife.findById(this, R.id.logOutput);
-        scrollView = ButterKnife.findById(this, R.id.scrollView);
+        logView = findViewById(R.id.logOutput);
+        scrollView = findViewById(R.id.scrollView);
     }
 
     @Override
@@ -117,7 +116,7 @@ public class CgeoTestsActivity extends Activity {
      *            referenced from XML layout
      */
     public void runTests(final View v) {
-        final Button button = ButterKnife.findById(this, R.id.buttonRun);
+        final Button button = findViewById(R.id.buttonRun);
         button.setEnabled(false);
         runTestsInternally();
     }

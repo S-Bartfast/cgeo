@@ -4,7 +4,7 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     android:orientation="vertical"
-    tools:context=".maps.google.v1.GoogleMapProvider" >
+    tools:context=".maps.google.v2.GoogleMapProvider" >
 
     <include layout="@layout/filter_bar" />
 
@@ -33,11 +33,17 @@
             android:id="@+id/map"
             android:layout_width="fill_parent"
             android:layout_height="fill_parent"
-            class="cgeo.geocaching.maps.google.v1.GoogleMapView"
-            android:apiKey="@string/maps_api_key"
+            class="cgeo.geocaching.maps.google.v2.GoogleMapView"
+            android:apiKey="@string/maps_api2_key"
             android:clickable="true"
+            android:focusable="true"
             android:enabled="true"
             android:keepScreenOn="true" />
+
+        <include layout="@layout/map_distanceinfo" />
+        <include layout="@layout/map_settings_button" />
+        <include layout="@layout/map_progressbar" />
+
     </RelativeLayout>
 
 </LinearLayout>

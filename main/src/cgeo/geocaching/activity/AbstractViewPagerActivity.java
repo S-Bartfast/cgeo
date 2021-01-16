@@ -6,20 +6,20 @@ import cgeo.geocaching.utils.Log;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.view.PagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.support.v4.view.ViewPager.OnPageChangeListener;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
+import androidx.viewpager.widget.ViewPager.OnPageChangeListener;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import butterknife.ButterKnife;
 import com.viewpagerindicator.TitlePageIndicator;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -68,13 +68,13 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
          * Returns a validated view.
          *
          */
-        View getDispatchedView(final ViewGroup parentView);
+        View getDispatchedView(ViewGroup parentView);
 
         /**
          * Returns a (maybe cached) view.
          *
          */
-        View getView(final ViewGroup parentView);
+        View getView(ViewGroup parentView);
 
         /**
          * Handles changed data-sets.
@@ -107,7 +107,7 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
     private class ViewPagerAdapter extends PagerAdapter {
 
         @Override
-        public void destroyItem(final ViewGroup container, final int position, final Object object) {
+        public void destroyItem(@NonNull final ViewGroup container, final int position, @NonNull final Object object) {
             if (position >= pageOrder.size()) {
                 return;
             }
@@ -126,7 +126,7 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
         }
 
         @Override
-        public void finishUpdate(final ViewGroup container) {
+        public void finishUpdate(@NonNull final ViewGroup container) {
             // empty
         }
 
@@ -136,7 +136,7 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
         }
 
         @Override
-        public Object instantiateItem(final ViewGroup container, final int position) {
+        public Object instantiateItem(@NonNull final ViewGroup container, final int position) {
 
             final Page page = pageOrder.get(position);
 
@@ -171,7 +171,7 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
         }
 
         @Override
-        public boolean isViewFromObject(final View view, final Object object) {
+        public boolean isViewFromObject(@NonNull final View view, @NonNull final Object object) {
             return view == object;
         }
 
@@ -186,12 +186,12 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
         }
 
         @Override
-        public void startUpdate(final ViewGroup arg0) {
+        public void startUpdate(@NonNull final ViewGroup arg0) {
             // empty
         }
 
         @Override
-        public int getItemPosition(final Object object) {
+        public int getItemPosition(@NonNull final Object object) {
             // We are doing the caching. So pretend that the view is gone.
             // The ViewPager will get it back in instantiateItem()
             return POSITION_NONE;
@@ -217,7 +217,7 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
      */
     protected final void createViewPager(final int startPageIndex, final OnPageSelectedListener pageSelectedListener) {
         // initialize ViewPager
-        viewPager = ButterKnife.findById(this, R.id.viewpager);
+        viewPager = findViewById(R.id.viewpager);
         viewPagerAdapter = new ViewPagerAdapter();
         viewPager.setAdapter(viewPagerAdapter);
 
@@ -264,6 +264,16 @@ public abstract class AbstractViewPagerActivity<Page extends Enum<Page>> extends
      * get the title for the given page
      */
     protected abstract String getTitle(Page page);
+
+    protected final void reinitializePage(final Page page) {
+        final PageViewCreator detailsCreator = getViewCreator(page);
+        if (detailsCreator != null) {
+            detailsCreator.notifyDataSetChanged();
+        }
+        if (viewPagerAdapter != null) {
+            viewPagerAdapter.notifyDataSetChanged();
+        }
+    }
 
     protected final void reinitializeViewPager() {
 

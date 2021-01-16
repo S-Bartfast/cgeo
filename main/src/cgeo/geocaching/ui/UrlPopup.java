@@ -1,10 +1,10 @@
 package cgeo.geocaching.ui;
 
 import cgeo.geocaching.R;
+import cgeo.geocaching.ui.dialog.Dialogs;
 
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 
@@ -17,24 +17,30 @@ public class UrlPopup {
     }
 
     public void show(final String title, final String message, final String url, final String urlButtonTitle) {
-        final AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        final AlertDialog.Builder builder = Dialogs.newBuilder(context);
         builder.setMessage(message)
                 .setIcon(android.R.drawable.ic_dialog_info)
                 .setTitle(title)
-                .setPositiveButton(R.string.err_none, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(final DialogInterface dialog, final int id) {
-                        dialog.cancel();
-                    }
-                })
-                .setNegativeButton(urlButtonTitle, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(final DialogInterface dialog, final int id) {
-                        final Intent i = new Intent(Intent.ACTION_VIEW);
-                        i.setData(Uri.parse(url));
-                        context.startActivity(i);
-                    }
+                .setPositiveButton(R.string.err_none, (dialog, id) -> dialog.cancel())
+                .setNegativeButton(urlButtonTitle, (dialog, id) -> {
+                    final Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setData(Uri.parse(url));
+                    context.startActivity(i);
                 });
+        builder.create().show();
+    }
+
+    public void forward(final String title, final String message, final String url) {
+        final AlertDialog.Builder builder = Dialogs.newBuilder(context);
+        builder.setMessage(message)
+                .setIcon(android.R.drawable.ic_dialog_info)
+                .setTitle(title)
+                .setPositiveButton(R.string.err_none, (dialog, id) -> {
+                    final Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setData(Uri.parse(url));
+                    context.startActivity(i);
+                })
+                .setNegativeButton(android.R.string.cancel, (dialog, id) -> dialog.cancel());
         builder.create().show();
     }
 }

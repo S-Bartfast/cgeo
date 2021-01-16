@@ -1,22 +1,22 @@
 package cgeo.geocaching.sorting;
 
+import cgeo.geocaching.R;
+import cgeo.geocaching.utils.Log;
+import cgeo.geocaching.utils.TextUtils;
+import cgeo.geocaching.utils.functions.Action1;
+
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
-import android.support.v4.view.ActionProvider;
 import android.view.MenuItem;
 import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.SubMenu;
 import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+import androidx.core.view.ActionProvider;
+
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-
-import cgeo.geocaching.R;
-import cgeo.geocaching.utils.Log;
-import cgeo.geocaching.utils.TextUtils;
-import cgeo.geocaching.utils.functions.Action1;
 
 /**
  * Provides a sub menu for sorting caches. Register your listener in the onCreateOptionsMenu of the containing activity.
@@ -49,6 +49,7 @@ public class SortActionProvider extends ActionProvider implements OnMenuItemClic
         }
 
         @Override
+        @NonNull
         public String toString() {
             return name;
         }
@@ -94,13 +95,7 @@ public class SortActionProvider extends ActionProvider implements OnMenuItemClic
         register(R.string.caches_sort_vote, VoteComparator.class);
 
         // sort the menu labels alphabetically for easier reading
-        Collections.sort(registry, new Comparator<ComparatorEntry>() {
-
-            @Override
-            public int compare(final ComparatorEntry lhs, final ComparatorEntry rhs) {
-                return TextUtils.COLLATOR.compare(lhs.name, rhs.name);
-            }
-        });
+        Collections.sort(registry, (lhs, rhs) -> TextUtils.COLLATOR.compare(lhs.name, rhs.name));
     }
 
     @Override

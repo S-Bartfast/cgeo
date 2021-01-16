@@ -1,7 +1,5 @@
 package cgeo.geocaching.test.mock;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.connector.gc.GCConstants;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.models.Geocache;
@@ -9,7 +7,7 @@ import cgeo.geocaching.models.Image;
 import cgeo.geocaching.models.Trackable;
 import cgeo.geocaching.utils.TextUtils;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -19,9 +17,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.Assert;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.assertj.core.api.Assertions;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public abstract class MockedCache extends Geocache {
 
@@ -80,7 +79,7 @@ public abstract class MockedCache extends Geocache {
 
             return TextUtils.replaceWhitespace(buffer.toString());
         } catch (final IOException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail("cannot read cache page", e);
         } finally {
             IOUtils.closeQuietly(is);
             IOUtils.closeQuietly(br);
@@ -144,6 +143,7 @@ public abstract class MockedCache extends Geocache {
     }
 
     @Override
+    @NonNull
     public List<Trackable> getInventory() {
         return Collections.emptyList();
     }

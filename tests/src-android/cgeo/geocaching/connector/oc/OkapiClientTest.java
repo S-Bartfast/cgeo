@@ -1,7 +1,5 @@
 package cgeo.geocaching.connector.oc;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.CGeoTestCase;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.enumerations.LoadFlags;
@@ -12,6 +10,8 @@ import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.storage.DataStore;
 
 import java.util.Locale;
+
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class OkapiClientTest extends CGeoTestCase {
 
@@ -30,8 +30,8 @@ public class OkapiClientTest extends CGeoTestCase {
         assertThat(cache.getGeocode()).isEqualTo(geoCode);
         assertThat(cache.getName()).isEqualTo("Oshkosh Municipal Tank");
         assertThat(cache.isDetailed()).isTrue();
-        assertThat(cache.getOwnerDisplayName()).isNotEmpty();
-        assertThat(cache.getOwnerUserId()).isEqualTo(cache.getOwnerDisplayName());
+        assertThat(cache.getOwnerDisplayName()).isEqualTo("glorkar");
+        assertThat(cache.getOwnerUserId()).isEqualTo("19");
     }
 
     public static void testOCSearchMustWorkWithoutOAuthAccessTokens() {
@@ -85,20 +85,20 @@ public class OkapiClientTest extends CGeoTestCase {
 
     public static void testPreferredLanguage() {
         final Locale savedLocale = Locale.getDefault();
-        final boolean useEnglish = Settings.useEnglish();
+        final String userLanguage = Settings.getUserLanguage();
         try {
-            Settings.setUseEnglish(false);
+            Settings.putUserLanguage("");
             Locale.setDefault(Locale.US);
             assertThat(OkapiClient.getPreferredLanguage()).isEqualTo("en");     // US, useEnglish = false
-            Settings.setUseEnglish(true);
+            Settings.putUserLanguage("en");
             assertThat(OkapiClient.getPreferredLanguage()).isEqualTo("en");     // US, useEnglish = true
             Locale.setDefault(Locale.GERMANY);
             assertThat(OkapiClient.getPreferredLanguage()).isEqualTo("en|de");  // DE, useEnglish = true
-            Settings.setUseEnglish(false);
+            Settings.putUserLanguage("");
             assertThat(OkapiClient.getPreferredLanguage()).isEqualTo("de|en");  // DE, useEnglish = false
         } finally {
             Locale.setDefault(savedLocale);
-            Settings.setUseEnglish(useEnglish);
+            Settings.putUserLanguage(userLanguage);
         }
     }
 

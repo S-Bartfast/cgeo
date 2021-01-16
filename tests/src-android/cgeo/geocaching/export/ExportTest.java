@@ -1,7 +1,5 @@
 package cgeo.geocaching.export;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.CGeoTestCase;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.enumerations.LoadFlags;
@@ -18,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class ExportTest extends CGeoTestCase {
 
@@ -44,7 +44,7 @@ public class ExportTest extends CGeoTestCase {
                 .setLog("Smile: \ud83d\ude0a")
                 .build();
         DataStore.saveCache(cache, LoadFlags.SAVE_ALL);
-        DataStore.saveLogs(cache.getGeocode(), Collections.singletonList(log));
+        DataStore.saveLogs(cache.getGeocode(), Collections.singletonList(log), true);
         assertCanExport(cache);
     }
 

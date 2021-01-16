@@ -18,8 +18,8 @@ import cgeo.geocaching.utils.JsonUtils;
 import cgeo.geocaching.utils.Log;
 import cgeo.geocaching.utils.SynchronizedDateFormat;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -31,8 +31,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import io.reactivex.Single;
-import io.reactivex.functions.Function;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.functions.Function;
 import okhttp3.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -127,8 +127,8 @@ final class ECApi {
 
             final String data = Network.getResponseData(response, false);
             if (!StringUtils.isBlank(data) && StringUtils.contains(data, "success")) {
-                if (logType == LogType.FOUND_IT || logType == LogType.ATTENDED) {
-                    ecLogin.setActualCachesFound(ecLogin.getActualCachesFound() + 1);
+                if (logType.isFoundLog()) {
+                    ecLogin.increaseActualCachesFound();
                 }
                 final String uid = StringUtils.remove(data, "success:");
                 return new LogResult(StatusCode.NO_ERROR, uid);
@@ -161,14 +161,11 @@ final class ECApi {
         final Single<Response> response = Network.getRequest(API_HOST + uri, params);
 
         // retry at most one time
-        return response.flatMap(new Function<Response, Single<Response>>() {
-            @Override
-            public Single<Response> apply(final Response response) {
-                if (!isRetry && response.code() == 403 && ecLogin.login() == StatusCode.NO_ERROR) {
-                    return apiRequest(uri, params, true);
-                }
-                return Single.just(response);
+        return response.flatMap((Function<Response, Single<Response>>) response1 -> {
+            if (!isRetry && response1.code() == 403 && ecLogin.login() == StatusCode.NO_ERROR) {
+                return apiRequest(uri, params, true);
             }
+            return Single.just(response1);
         });
     }
 

@@ -7,6 +7,7 @@ import cgeo.geocaching.list.StoredList;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.network.Network;
 import cgeo.geocaching.settings.Settings;
+import cgeo.geocaching.speech.SpeechService;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.ui.CacheDetailsCreator;
 import cgeo.geocaching.ui.WeakReferenceHandler;
@@ -14,13 +15,10 @@ import cgeo.geocaching.utils.AndroidRxUtils;
 import cgeo.geocaching.utils.DisposableHandler;
 import cgeo.geocaching.utils.Log;
 import cgeo.geocaching.utils.TextUtils;
-import cgeo.geocaching.utils.functions.Action1;
 
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Message;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.FragmentActivity;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -28,15 +26,18 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentActivity;
+
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.Set;
 
-import butterknife.ButterKnife;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.commons.lang3.StringUtils;
 
-public class CachePopupFragment extends AbstractDialogFragment {
+public class CachePopupFragment extends AbstractDialogFragmentWithProximityNotification {
     private final Progress progress = new Progress();
 
     public static DialogFragment newInstance(final String geocode) {
@@ -109,8 +110,12 @@ public class CachePopupFragment extends AbstractDialogFragment {
     @Override
     protected void init() {
         super.init();
-
         try {
+            if (null != proximityNotification) {
+                proximityNotification.setReferencePoint(cache.getCoords());
+                proximityNotification.setTextNotifications(getContext());
+            }
+
             if (StringUtils.isNotBlank(cache.getName())) {
                 setTitle(TextUtils.coloredCacheText(cache, cache.getName()));
             } else {
@@ -119,18 +124,19 @@ public class CachePopupFragment extends AbstractDialogFragment {
 
             final View view = getView();
             assert view != null;
-            final TextView titleView = ButterKnife.findById(view, R.id.actionbar_title);
+            final TextView titleView = view.findViewById(R.id.actionbar_title);
             titleView.setCompoundDrawablesWithIntrinsicBounds(Compatibility.getDrawable(getResources(), cache.getType().markerId), null, null, null);
 
-            final LinearLayout layout = ButterKnife.findById(view, R.id.details_list);
+            final LinearLayout layout = view.findViewById(R.id.details_list);
             details = new CacheDetailsCreator(getActivity(), layout);
 
             addCacheDetails();
 
             // offline use
-            CacheDetailActivity.updateOfflineBox(view, cache, res, new RefreshCacheClickListener(), new DropCacheClickListener(), new StoreCacheClickListener(), null, new StoreCacheClickListener());
+            CacheDetailActivity.updateOfflineBox(view, cache, res, new RefreshCacheClickListener(), new DropCacheClickListener(), new StoreCacheClickListener(), new ShowHintClickListener(view), null, new StoreCacheClickListener());
 
             CacheDetailActivity.updateCacheLists(view, cache, res);
+
         } catch (final Exception e) {
             Log.e("CachePopupFragment.init", e);
         }
@@ -140,23 +146,29 @@ public class CachePopupFragment extends AbstractDialogFragment {
     }
 
     @Override
-    public boolean onOptionsItemSelected(final MenuItem item) {
+    public boolean onOptionsItemSelected(@NonNull final MenuItem item) {
         if (super.onOptionsItemSelected(item)) {
             return true;
         }
 
         final int menuItem = item.getItemId();
 
-        switch (menuItem) {
-            case R.id.menu_delete:
-                new DropCacheClickListener().onClick(getView());
-                return true;
+        if (menuItem == R.id.menu_tts_toggle) {
+            SpeechService.toggleService(getActivity(), cache.getCoords());
+        } else {
+            return false;
         }
-        return false;
+        return true;
     }
 
     @Override
-    public void onConfigurationChanged(final Configuration newConfig) {
+    public void onDestroy() {
+        SpeechService.stopService(getActivity());
+        super.onDestroy();
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull final Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
         init();
@@ -183,12 +195,7 @@ public class CachePopupFragment extends AbstractDialogFragment {
             if (Settings.getChooseList() || cache.isOffline()) {
                 // let user select list to store cache in
                 new StoredList.UserInterface(getActivity()).promptForMultiListSelection(R.string.lists_title,
-                        new Action1<Set<Integer>>() {
-                            @Override
-                            public void call(final Set<Integer> selectedListIds) {
-                                storeCacheOnLists(selectedListIds);
-                            }
-                        }, true, cache.getLists(), fastStoreOnLastSelection);
+                        this::storeCacheOnLists, true, cache.getLists(), fastStoreOnLastSelection);
             } else {
                 storeCacheOnLists(Collections.singleton(StoredList.STANDARD_LIST_ID));
             }
@@ -200,28 +207,20 @@ public class CachePopupFragment extends AbstractDialogFragment {
                 DataStore.saveLists(Collections.singletonList(cache), listIds);
                 CacheDetailActivity.updateOfflineBox(getView(), cache, res,
                         new RefreshCacheClickListener(), new DropCacheClickListener(),
-                        new StoreCacheClickListener(), null, new StoreCacheClickListener());
+                        new StoreCacheClickListener(), new ShowHintClickListener(getView()), null, new StoreCacheClickListener());
                 CacheDetailActivity.updateCacheLists(getView(), cache, res);
             } else {
                 final StoreCacheHandler storeCacheHandler = new StoreCacheHandler(CachePopupFragment.this, R.string.cache_dialog_offline_save_message);
-                final FragmentActivity activity = getActivity();
+                final FragmentActivity activity = requireActivity();
                 progress.show(activity, res.getString(R.string.cache_dialog_offline_save_title), res.getString(R.string.cache_dialog_offline_save_message), true, storeCacheHandler.disposeMessage());
-                AndroidRxUtils.andThenOnUi(Schedulers.io(), new Runnable() {
-                    @Override
-                    public void run() {
-                        cache.store(listIds, storeCacheHandler);
-                    }
-                }, new Runnable() {
-                    @Override
-                    public void run() {
-                        activity.supportInvalidateOptionsMenu();
-                        final View view = getView();
-                        if (view != null) {
-                            CacheDetailActivity.updateOfflineBox(view, cache, res,
-                                    new RefreshCacheClickListener(), new DropCacheClickListener(),
-                                    new StoreCacheClickListener(), null, new StoreCacheClickListener());
-                            CacheDetailActivity.updateCacheLists(view, cache, res);
-                        }
+                AndroidRxUtils.andThenOnUi(Schedulers.io(), () -> cache.store(listIds, storeCacheHandler), () -> {
+                    activity.invalidateOptionsMenu();
+                    final View view = getView();
+                    if (view != null) {
+                        CacheDetailActivity.updateOfflineBox(view, cache, res,
+                                new RefreshCacheClickListener(), new DropCacheClickListener(),
+                                new StoreCacheClickListener(), new ShowHintClickListener(view), null, new StoreCacheClickListener());
+                        CacheDetailActivity.updateCacheLists(view, cache, res);
                     }
                 });
             }
@@ -261,6 +260,26 @@ public class CachePopupFragment extends AbstractDialogFragment {
         }
     }
 
+    private static class ShowHintClickListener implements View.OnClickListener {
+        private final View anchorView;
+
+        ShowHintClickListener (final View view) {
+            anchorView = view;
+        }
+
+        @Override
+        public void onClick(final View view) {
+            final TextView offlineHintText = (TextView) anchorView.findViewById(R.id.offline_hint_text);
+            final View offlineHintSeparator = anchorView.findViewById(R.id.offline_hint_separator);
+            if (offlineHintText.getVisibility() == View.VISIBLE) {
+                offlineHintText.setVisibility(View.GONE);
+                offlineHintSeparator.setVisibility(View.GONE);
+            } else {
+                offlineHintText.setVisibility(View.VISIBLE);
+                offlineHintSeparator.setVisibility(View.VISIBLE);
+            }
+        }
+    }
 
     @Override
     public void navigateTo() {

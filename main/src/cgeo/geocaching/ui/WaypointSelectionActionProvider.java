@@ -5,13 +5,13 @@ import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Waypoint;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ActionProvider;
-import android.support.v4.view.MenuItemCompat;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.SubMenu;
+
+import androidx.annotation.NonNull;
+import androidx.core.view.ActionProvider;
+import androidx.core.view.MenuItemCompat;
 
 /**
  * Action provider that lists all waypoints of a cache. Can be used to select a certain waypoint out of multiple ones in
@@ -23,9 +23,9 @@ public class WaypointSelectionActionProvider extends AbstractMenuActionProvider 
     private Geocache geocache;
 
     public interface Callback {
-        void onWaypointSelected(final Waypoint waypoint);
+        void onWaypointSelected(Waypoint waypoint);
 
-        void onGeocacheSelected(final Geocache geocache);
+        void onGeocacheSelected(Geocache geocache);
     }
 
     /**
@@ -55,23 +55,15 @@ public class WaypointSelectionActionProvider extends AbstractMenuActionProvider 
         subMenu.clear();
         for (final Waypoint waypoint : geocache.getWaypoints()) {
             if (waypoint.getCoords() != null) {
-                subMenu.add(Menu.NONE, waypoint.getId(), Menu.NONE, waypoint.getName()).setOnMenuItemClickListener(new OnMenuItemClickListener() {
-
-                    @Override
-                    public boolean onMenuItemClick(final MenuItem item) {
-                        callback.onWaypointSelected(waypoint);
-                        return true;
-                    }
+                subMenu.add(Menu.NONE, waypoint.getId(), Menu.NONE, waypoint.getName()).setOnMenuItemClickListener(item -> {
+                    callback.onWaypointSelected(waypoint);
+                    return true;
                 });
             }
         }
-        subMenu.add(Menu.NONE, Menu.NONE, Menu.NONE, getContext().getString(R.string.cache)).setOnMenuItemClickListener(new OnMenuItemClickListener() {
-
-            @Override
-            public boolean onMenuItemClick(final MenuItem item) {
-                callback.onGeocacheSelected(geocache);
-                return true;
-            }
+        subMenu.add(Menu.NONE, Menu.NONE, Menu.NONE, getContext().getString(R.string.cache)).setOnMenuItemClickListener(item -> {
+            callback.onGeocacheSelected(geocache);
+            return true;
         });
     }
 

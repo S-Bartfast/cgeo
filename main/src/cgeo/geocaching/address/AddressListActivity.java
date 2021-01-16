@@ -5,20 +5,20 @@ import cgeo.geocaching.Intents;
 import cgeo.geocaching.R;
 import cgeo.geocaching.activity.AbstractActionBarActivity;
 import cgeo.geocaching.location.Geopoint;
+import cgeo.geocaching.maps.DefaultMap;
 import cgeo.geocaching.ui.recyclerview.RecyclerViewProvider;
 import cgeo.geocaching.utils.AndroidRxUtils;
 
 import android.app.ProgressDialog;
 import android.location.Address;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.widget.RecyclerView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
-import java.util.List;
 
-import io.reactivex.Observable;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.core.Observable;
 import org.apache.commons.lang3.StringUtils;
 
 public class AddressListActivity extends AbstractActionBarActivity implements AddressClickListener {
@@ -43,27 +43,26 @@ public class AddressListActivity extends AbstractActionBarActivity implements Ad
 
     private void lookupAddressInBackground(final String keyword, final AddressListAdapter adapter, final ProgressDialog waitDialog) {
         final Observable<Address> geocoderObservable = new AndroidGeocoder(this).getFromLocationName(keyword)
-                .onErrorResumeNext(MapQuestGeocoder.getFromLocationName(keyword));
-        AndroidRxUtils.bindActivity(this, geocoderObservable.toList()).subscribe(new Consumer<List<Address>>() {
-            @Override
-            public void accept(final List<Address> foundAddresses) {
-                waitDialog.dismiss();
-                addresses.addAll(foundAddresses);
-                adapter.notifyItemRangeInserted(0, foundAddresses.size());
-            }
-        }, new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) {
-                finish();
-                showToast(res.getString(R.string.err_unknown_address));
-            }
+                .onErrorResumeWith(MapQuestGeocoder.getFromLocationName(keyword));
+        AndroidRxUtils.bindActivity(this, geocoderObservable.toList()).subscribe(foundAddresses -> {
+            waitDialog.dismiss();
+            addresses.addAll(foundAddresses);
+            adapter.notifyItemRangeInserted(0, foundAddresses.size());
+        }, throwable -> {
+            finish();
+            showToast(res.getString(R.string.err_unknown_address));
         });
     }
 
     @Override
-    public void onClickAddress(final Address address) {
+    public void onClickAddress(@NonNull final Address address) {
         CacheListActivity.startActivityAddress(this, new Geopoint(address.getLatitude(), address.getLongitude()), StringUtils.defaultString(address.getAddressLine(0)));
         finish();
     }
 
+    @Override
+    public void onClickMapIcon(@NonNull final Address address) {
+        DefaultMap.startActivityGeoCode(this, new Geopoint(address.getLatitude(), address.getLongitude()));
+        finish();
+    }
 }

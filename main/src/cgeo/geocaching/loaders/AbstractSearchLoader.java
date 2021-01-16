@@ -7,13 +7,14 @@ import cgeo.geocaching.connector.IConnector;
 import cgeo.geocaching.utils.Log;
 
 import android.app.Activity;
-import android.support.v4.content.AsyncTaskLoader;
 import android.widget.Toast;
+
+import androidx.loader.content.AsyncTaskLoader;
 
 import java.lang.ref.WeakReference;
 import java.util.Collection;
 
-import io.reactivex.functions.Function;
+import io.reactivex.rxjava3.functions.Function;
 
 public abstract class AbstractSearchLoader extends AsyncTaskLoader<SearchResult> {
 
@@ -97,12 +98,9 @@ public abstract class AbstractSearchLoader extends AsyncTaskLoader<SearchResult>
         } catch (final NoConnectorException ignored) {
             final Activity activity = activityRef.get();
             if (activity != null) {
-                activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(activity, R.string.warn_no_connector, Toast.LENGTH_LONG).show();
-                        activity.finish();
-                    }
+                activity.runOnUiThread(() -> {
+                    Toast.makeText(activity, R.string.warn_no_connector, Toast.LENGTH_LONG).show();
+                    activity.finish();
                 });
             }
         } catch (final Exception e) {

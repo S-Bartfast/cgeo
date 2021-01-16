@@ -1,9 +1,7 @@
 package cgeo.geocaching.network;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.security.InvalidParameterException;
 import java.util.ArrayList;
@@ -12,6 +10,8 @@ import java.util.Comparator;
 
 import okhttp3.HttpUrl;
 import okhttp3.HttpUrl.Builder;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 
 /**
  * List of key/values pairs to be used in a GET or POST request.
@@ -32,12 +32,9 @@ public class Parameters extends ArrayList<ImmutablePair<String, String>> {
         put(keyValues);
     }
 
-    private static final Comparator<ImmutablePair<String, String>> comparator = new Comparator<ImmutablePair<String, String>>() {
-        @Override
-        public int compare(final ImmutablePair<String, String> nv1, final ImmutablePair<String, String> nv2) {
-            final int comparedKeys = nv1.left.compareTo(nv2.left);
-            return comparedKeys != 0 ? comparedKeys : nv1.right.compareTo(nv2.right);
-        }
+    private static final Comparator<ImmutablePair<String, String>> comparator = (nv1, nv2) -> {
+        final int comparedKeys = nv1.left.compareTo(nv2.left);
+        return comparedKeys != 0 ? comparedKeys : nv1.right.compareTo(nv2.right);
     };
 
     /**
@@ -85,6 +82,7 @@ public class Parameters extends ArrayList<ImmutablePair<String, String>> {
     }
 
     @Override
+    @NonNull
     public String toString() {
         if (percentEncoding) {
             if (isEmpty()) {
@@ -120,23 +118,26 @@ public class Parameters extends ArrayList<ImmutablePair<String, String>> {
     }
 
     /**
-     * Merge two (possibly null) Parameters object.
+     * Merge two or more (possibly null) Parameters object.
      *
      * @param params
-     *            the object to merge into if non-null
-     * @param extra
-     *            the object to merge from if non-null
-     * @return params with extra data if params was non-null, extra otherwise
+     *            the objects to merge
+     * @return the first non-null Parameters object enriched with the others, or null if all
+     *         of params were null
      */
     @Nullable
-    public static Parameters merge(@Nullable final Parameters params, @Nullable final Parameters extra) {
-        if (params == null) {
-            return extra;
+    public static Parameters merge(@Nullable final Parameters... params) {
+        Parameters result = null;
+        if (params != null) {
+            for (final Parameters p: params) {
+                if (result == null) {
+                    result = p;
+                } else if (p != null) {
+                    result.addAll(p);
+                }
+            }
         }
-        if (extra != null) {
-            params.addAll(extra);
-        }
-        return params;
+        return result;
     }
 
     public void add(final String key, final String value) {

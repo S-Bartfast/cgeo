@@ -1,9 +1,12 @@
 package cgeo.geocaching.location;
 
+import cgeo.geocaching.connector.gc.GCConnector;
+import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.ICoordinates;
+import cgeo.geocaching.models.Waypoint;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,6 +36,12 @@ public final class Viewport {
         final double lonHalfSpan = Math.abs(lonSpan) / 2;
         bottomLeft = new Geopoint(centerLat - latHalfSpan, centerLon - lonHalfSpan);
         topRight = new Geopoint(centerLat + latHalfSpan, centerLon + lonHalfSpan);
+    }
+
+    public Viewport(@NonNull final ICoordinates point) {
+        center = point.getCoords();
+        bottomLeft = point.getCoords();
+        topRight = point.getCoords();
     }
 
     public double getLatitudeMin() {
@@ -161,18 +170,55 @@ public final class Viewport {
      * Return the smallest viewport containing all the given points.
      *
      * @param points
-     *            a set of points. Point with null coordinates (or null themselves) will be ignored
+     *            a set of points. Points with null coordinates (or null themselves) will be ignored
      * @return the smallest viewport containing the non-null coordinates, or null if no coordinates are non-null
      */
     @Nullable
     public static Viewport containing(final Collection<? extends ICoordinates> points) {
+        return containing(points, false, false);
+    }
+
+    /**
+     * Return the smallest viewport containing all those of the given geocaches,
+     * which are from geocaching.com and not stored in our database
+     *
+     * @param geocaches
+     *            a set of geocaches. Geocaches with null coordinates (or null themselves) will be ignored
+     * @return the smallest viewport containing the non-null coordinates, or null if no coordinates are non-null
+     */
+    @Nullable
+    public static Viewport containingGCliveCaches(final Collection<Geocache> geocaches) {
+        return containing(geocaches, false, true);
+    }
+
+    /**
+     * Return the smallest viewport containing all given geocaches including all their waypoints
+     *
+     * @param geocaches
+     *            a set of geocaches. Geocaches/waypoints with null coordinates (or null themselves) will be ignored
+     * @return the smallest viewport containing the non-null coordinates, or null if no coordinates are non-null
+     */
+    @Nullable
+    public static Viewport containingCachesAndWaypoints(final Collection<Geocache> geocaches) {
+        return containing(geocaches, true, false);
+    }
+
+    /**
+     * internal worker function for
+     * - containing(Points)
+     * - containingGCLiveCaches(Geocaches)
+     * - containingCachesAndWaypoints(Geocaches)
+     */
+    @Nullable
+    private static Viewport containing(final Collection<? extends ICoordinates> points, final boolean withWaypoints, final boolean gcLiveOnly) {
         boolean valid = false;
         double latMin = Double.MAX_VALUE;
         double latMax = -Double.MAX_VALUE;
         double lonMin = Double.MAX_VALUE;
         double lonMax = -Double.MAX_VALUE;
+        final GCConnector conn = GCConnector.getInstance();
         for (final ICoordinates point : points) {
-            if (point != null) {
+            if (point != null && (!gcLiveOnly || (conn.canHandle(((Geocache) point).getGeocode()) && !((Geocache) point).inDatabase()))) {
                 final Geopoint coords = point.getCoords();
                 if (coords != null) {
                     valid = true;
@@ -182,6 +228,22 @@ public final class Viewport {
                     latMax = Math.max(latMax, latitude);
                     lonMin = Math.min(lonMin, longitude);
                     lonMax = Math.max(lonMax, longitude);
+                }
+                if (withWaypoints && ((Geocache) point).hasWaypoints()) {
+                    for (final Waypoint waypoint : ((Geocache) point).getWaypoints()) {
+                        if (waypoint != null) {
+                            final Geopoint wpcoords = waypoint.getCoords();
+                            if (wpcoords != null) {
+                                valid = true;
+                                final double latitude = wpcoords.getLatitude();
+                                final double longitude = wpcoords.getLongitude();
+                                latMin = Math.min(latMin, latitude);
+                                latMax = Math.max(latMax, latitude);
+                                lonMin = Math.min(lonMin, longitude);
+                                lonMax = Math.max(lonMax, longitude);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -201,6 +263,10 @@ public final class Viewport {
         }
         final Viewport vp = (Viewport) other;
         return bottomLeft.equals(vp.bottomLeft) && topRight.equals(vp.topRight);
+    }
+
+    public boolean isJustADot() {
+        return bottomLeft.equals(topRight);
     }
 
     @Override

@@ -6,7 +6,6 @@
     <issue id="AddJavascriptInterface" severity="ignore" />
     <issue id="AllowBackup" severity="ignore" />
     <issue id="AlwaysShowAction" severity="ignore" />
-    <issue id="AndroidGradlePluginVersion" severity="ignore" />
     <issue id="AppCompatMethod" severity="ignore" />
     <issue id="AppCompatResource" severity="ignore" />
     <issue id="Assert" severity="ignore" />
@@ -38,7 +37,6 @@
     <issue id="ExportedService" severity="ignore" />
     <issue id="ExtraText" severity="ignore" />
     <issue id="ExtraTranslation" severity="ignore" />
-    <issue id="FloatMath" severity="ignore" />
     <issue id="GetInstance" severity="ignore" />
     <issue id="GifUsage" severity="ignore" />
     <issue id="GradleCompatible" severity="ignore" />
@@ -49,6 +47,7 @@
     <issue id="GradleIdeError" severity="ignore" />
     <issue id="GradleOverrides" severity="ignore" />
     <issue id="GradlePath" severity="ignore" />
+    <issue id="GradlePluginVersion" severity="ignore" />
     <issue id="GrantAllUris" severity="ignore" />
     <issue id="GridLayout" severity="ignore" />
     <issue id="HandlerLeak" severity="ignore" />
@@ -68,7 +67,6 @@
     <issue id="IconXmlAndPng" severity="ignore" />
     <issue id="IllegalResourceRef" severity="ignore" />
     <issue id="ImpliedQuantity" severity="ignore" />
-    <issue id="ImproperProjectLevelStatement" severity="ignore" />
     <issue id="InOrMmUsage" severity="ignore" />
     <issue id="IncludeLayoutParam" severity="ignore" />
     <issue id="InconsistentArrays" severity="ignore" />
@@ -90,12 +88,10 @@
     <issue id="ManifestTypo" severity="ignore" />
     <issue id="MenuTitle" severity="ignore" />
     <issue id="MergeRootFrame" severity="ignore" />
-    <issue id="MisplacedStatement" severity="ignore" />
     <issue id="MissingApplicationIcon" severity="ignore" />
     <issue id="MissingId" severity="ignore" />
     <issue id="MissingPrefix" severity="ignore" />
     <issue id="MissingQuantity" severity="ignore" />
-    <issue id="MissingRegistered" severity="ignore" />
     <issue id="MissingSuperCall" severity="ignore" />
     <issue id="MissingTranslation" severity="ignore" />
     <issue id="MissingVersion" severity="ignore" />

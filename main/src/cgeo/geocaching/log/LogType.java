@@ -1,8 +1,10 @@
 package cgeo.geocaching.log;
 
-import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import cgeo.geocaching.CgeoApplication;
+import cgeo.geocaching.R;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -10,8 +12,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import cgeo.geocaching.CgeoApplication;
-import cgeo.geocaching.R;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * Different log types
@@ -29,7 +30,7 @@ public enum LogType {
     NEEDS_ARCHIVE(7, "7", "Needs Archived", "", R.string.log_needs_archived, R.drawable.mark_red, R.drawable.marker_archive),
     WILL_ATTEND(9, "9", "Will Attend", "Will attend", R.string.log_attend),
     ATTENDED(10, "10", "Attended", "Attended", R.string.log_attended, R.drawable.mark_green, R.drawable.marker_found_offline),
-    RETRIEVED_IT(13, "13", "retrieved it", "", R.string.log_retrieved, R.drawable.mark_green_more),
+    RETRIEVED_IT(13, "13", "Retrieved it", "", R.string.log_retrieved, R.drawable.mark_green_more),
     PLACED_IT(14, "14", "placed it", "", R.string.log_placed, R.drawable.mark_green_more),
     GRABBED_IT(19, "19", "grabbed it", "", R.string.log_grabbed, R.drawable.mark_green_more),
     NEEDS_MAINTENANCE(45, "45", "Needs Maintenance", "Needs maintenance", R.string.log_maintenance_needed, R.drawable.mark_red, R.drawable.marker_maintenance),

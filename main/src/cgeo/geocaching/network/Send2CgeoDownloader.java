@@ -9,7 +9,7 @@ import cgeo.geocaching.utils.Log;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
-import io.reactivex.Scheduler;
+import io.reactivex.rxjava3.core.Scheduler;
 import okhttp3.Response;
 import org.apache.commons.lang3.StringUtils;
 
@@ -42,7 +42,7 @@ public class Send2CgeoDownloader {
 
                 // Download new code
                 try {
-                    final Response responseFromWeb = Network.getRequest("http://send2.cgeo.org/read.html", params)
+                    final Response responseFromWeb = Network.getRequest("https://send2.cgeo.org/read.html", params)
                             .flatMap(Network.withSuccess).blockingGet();
 
                     final String response = Network.getResponseData(responseFromWeb);

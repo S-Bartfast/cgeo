@@ -14,18 +14,17 @@ import cgeo.geocaching.utils.Log;
 import cgeo.geocaching.utils.TextUtils;
 
 import android.app.ProgressDialog;
-import android.content.DialogInterface;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.v7.widget.RecyclerView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.collections4.CollectionUtils;
@@ -119,18 +118,15 @@ public abstract class AbstractFileListActivity<T extends RecyclerView.Adapter<? 
                 res.getString(R.string.file_searching),
                 true,
                 true,
-                new DialogInterface.OnCancelListener() {
-                    @Override
-                    public void onCancel(final DialogInterface arg0) {
-                        if (searchingThread != null && searchingThread.isAlive()) {
-                            searchingThread.notifyEnd();
-                        }
-                        if (files.isEmpty() && requireFiles()) {
-                            finish();
-                        }
+                arg0 -> {
+                    if (searchingThread != null && searchingThread.isAlive()) {
+                        searchingThread.notifyEnd();
+                    }
+                    if (files.isEmpty() && requireFiles()) {
+                        finish();
                     }
                 }
-                );
+        );
 
         searchingThread = new SearchFilesThread();
         searchingThread.start();
@@ -191,20 +187,9 @@ public abstract class AbstractFileListActivity<T extends RecyclerView.Adapter<? 
             changeWaitDialogHandler.sendMessage(Message.obtain(changeWaitDialogHandler, 0, "loaded directories"));
 
             files.addAll(list);
-            Collections.sort(files, new Comparator<File>() {
+            Collections.sort(files, (lhs, rhs) -> TextUtils.COLLATOR.compare(lhs.getName(), rhs.getName()));
 
-                @Override
-                public int compare(final File lhs, final File rhs) {
-                    return TextUtils.COLLATOR.compare(lhs.getName(), rhs.getName());
-                }
-            });
-
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    adapter.notifyDataSetChanged();
-                }
-            });
+            runOnUiThread(() -> adapter.notifyDataSetChanged());
 
             loadFilesHandler.sendMessage(Message.obtain(loadFilesHandler));
         }

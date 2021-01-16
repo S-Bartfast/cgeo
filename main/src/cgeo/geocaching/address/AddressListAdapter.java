@@ -1,19 +1,19 @@
 package cgeo.geocaching.address;
-
 import cgeo.geocaching.R;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Units;
 import cgeo.geocaching.sensors.Sensors;
-import cgeo.geocaching.ui.recyclerview.AbstractRecyclerViewAdapter;
 import cgeo.geocaching.ui.recyclerview.AbstractRecyclerViewHolder;
 
 import android.location.Address;
-import android.support.annotation.NonNull;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +21,7 @@ import java.util.List;
 import butterknife.BindView;
 import org.apache.commons.lang3.StringUtils;
 
-class AddressListAdapter extends AbstractRecyclerViewAdapter<AddressListAdapter.AddressListHolder> {
+class AddressListAdapter extends RecyclerView.Adapter<AddressListAdapter.AddressListHolder> {
 
     @NonNull private final Geopoint location;
     @NonNull private final List<Address> addresses;
@@ -31,11 +31,11 @@ class AddressListAdapter extends AbstractRecyclerViewAdapter<AddressListAdapter.
 
         @BindView(R.id.label) TextView label;
         @BindView(R.id.distance) TextView distance;
+        @BindView(R.id.mapIcon) ImageView mapIcon;
 
         AddressListHolder(final View itemView) {
             super(itemView);
         }
-
     }
 
     AddressListAdapter(@NonNull final List<Address> addresses, @NonNull final AddressClickListener addressClickListener) {
@@ -50,22 +50,17 @@ class AddressListAdapter extends AbstractRecyclerViewAdapter<AddressListAdapter.
     }
 
     @Override
+    @NonNull
     public AddressListHolder onCreateViewHolder(final ViewGroup parent, final int viewType) {
         final View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.addresslist_item, parent, false);
         final AddressListHolder viewHolder = new AddressListHolder(view);
-        viewHolder.itemView.setOnClickListener(new OnClickListener() {
-
-            @Override
-            public void onClick(final View view) {
-                clickListener.onClickAddress(addresses.get(viewHolder.getItemPosition()));
-            }
-        });
+        viewHolder.itemView.setOnClickListener(view1 -> clickListener.onClickAddress(addresses.get(viewHolder.getAdapterPosition())));
+        viewHolder.mapIcon.setOnClickListener(v -> clickListener.onClickMapIcon(addresses.get(viewHolder.getAdapterPosition())));
         return viewHolder;
     }
 
     @Override
     public void onBindViewHolder(final AddressListHolder holder, final int position) {
-        super.onBindViewHolder(holder, position);
         final Address address = addresses.get(position);
         holder.label.setText(getAddressText(address));
         holder.distance.setText(getDistanceText(address));

@@ -9,7 +9,6 @@ import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.ui.dialog.Dialogs.ItemWithIcon;
 import cgeo.geocaching.utils.ImageUtils;
-import cgeo.geocaching.utils.functions.Action1;
 
 import android.content.Intent;
 import android.content.Intent.ShortcutIconResource;
@@ -17,8 +16,10 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Bundle;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.StringRes;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,7 @@ public class CreateShortcutActivity extends AbstractActionBarActivity {
         }
 
         @Override
+        @NonNull
         public String toString() {
             return CgeoApplication.getInstance().getString(titleResourceId);
         }
@@ -83,27 +85,17 @@ public class CreateShortcutActivity extends AbstractActionBarActivity {
         shortcuts.add(new Shortcut(R.string.any_button, R.drawable.main_any, new Intent(this, NavigateAnyPointActivity.class)));
         shortcuts.add(new Shortcut(R.string.menu_history, R.drawable.main_stored, CacheListActivity.getHistoryIntent(this)));
 
-        Dialogs.select(this, getString(R.string.create_shortcut), shortcuts, new Action1<Shortcut>() {
-
-            @Override
-            public void call(final Shortcut shortcut) {
-                if (offlineShortcut.equals(shortcut)) {
-                    promptForListShortcut();
-                } else {
-                    createShortcutAndFinish(shortcut.toString(), shortcut.intent, shortcut.drawableResourceId);
-                }
+        Dialogs.select(this, getString(R.string.create_shortcut), shortcuts, shortcut -> {
+            if (offlineShortcut.equals(shortcut)) {
+                promptForListShortcut();
+            } else {
+                createShortcutAndFinish(shortcut.toString(), shortcut.intent, shortcut.drawableResourceId);
             }
         });
     }
 
     protected void promptForListShortcut() {
-        new StoredList.UserInterface(this).promptForListSelection(R.string.create_shortcut, new Action1<Integer>() {
-
-            @Override
-            public void call(final Integer listId) {
-                createOfflineListShortcut(listId);
-            }
-        }, true, PseudoList.NEW_LIST.id);
+        new StoredList.UserInterface(this).promptForListSelection(R.string.create_shortcut, this::createOfflineListShortcut, true, PseudoList.NEW_LIST.id);
     }
 
     protected void createOfflineListShortcut(final int listId) {
@@ -135,9 +127,9 @@ public class CreateShortcutActivity extends AbstractActionBarActivity {
 
     private Bitmap createOverlay(@DrawableRes final int drawableResourceId) {
         final LayerDrawable layerDrawable = new LayerDrawable(new Drawable[] {
-                Compatibility.getDrawable(res, drawableResourceId), Compatibility.getDrawable(res, R.drawable.cgeo) });
+                Compatibility.getDrawable(res, drawableResourceId), Compatibility.getDrawable(res, R.drawable.cgeo_borderless) });
         layerDrawable.setLayerInset(0, 0, 0, 10, 10);
-        layerDrawable.setLayerInset(1, 50, 50, 0, 0);
+        layerDrawable.setLayerInset(1, 70, 70, 0, 0);
         return ImageUtils.convertToBitmap(layerDrawable);
     }
 

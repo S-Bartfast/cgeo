@@ -3,6 +3,8 @@ package cgeo.geocaching.connector.oc;
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.SearchResult;
 import cgeo.geocaching.connector.ILoggingManager;
+import cgeo.geocaching.connector.UserInfo;
+import cgeo.geocaching.connector.UserInfo.UserInfoStatus;
 import cgeo.geocaching.connector.capability.ILogin;
 import cgeo.geocaching.connector.capability.ISearchByCenter;
 import cgeo.geocaching.connector.capability.ISearchByFinder;
@@ -12,8 +14,6 @@ import cgeo.geocaching.connector.capability.ISearchByViewPort;
 import cgeo.geocaching.connector.capability.IgnoreCapability;
 import cgeo.geocaching.connector.capability.PersonalNoteCapability;
 import cgeo.geocaching.connector.capability.WatchListCapability;
-import cgeo.geocaching.connector.gc.MapTokens;
-import cgeo.geocaching.connector.oc.UserInfo.UserInfoStatus;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Viewport;
 import cgeo.geocaching.log.LogCacheActivity;
@@ -26,9 +26,10 @@ import cgeo.geocaching.utils.Log;
 
 import android.app.Activity;
 import android.os.Handler;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import java.util.Locale;
 
@@ -58,7 +59,7 @@ public class OCApiLiveConnector extends OCApiConnector implements ISearchByCente
 
     @Override
     @NonNull
-    public SearchResult searchByViewport(@NonNull final Viewport viewport, @Nullable final MapTokens tokens) {
+    public SearchResult searchByViewport(@NonNull final Viewport viewport) {
         final SearchResult result = new SearchResult(OkapiClient.getCachesBBox(viewport, this));
 
         Log.d(String.format(Locale.getDefault(), "OC returning %d caches from search by viewport", result.getCount()));
@@ -84,7 +85,7 @@ public class OCApiLiveConnector extends OCApiConnector implements ISearchByCente
     @Override
     public OAuthLevel getSupportedAuthLevel() {
 
-        if (Settings.hasOCAuthorization(tokenPublicPrefKeyId, tokenSecretPrefKeyId)) {
+        if (Settings.hasOAuthAuthorization(tokenPublicPrefKeyId, tokenSecretPrefKeyId)) {
             return OAuthLevel.Level3;
         }
         return OAuthLevel.Level1;
@@ -213,12 +214,12 @@ public class OCApiLiveConnector extends OCApiConnector implements ISearchByCente
     }
 
     @Override
-    public boolean canIgnoreCache(final Geocache cache) {
+    public boolean canIgnoreCache(@NonNull final Geocache cache) {
         return true;
     }
 
     @Override
-    public void ignoreCache(final Geocache cache) {
+    public void ignoreCache(@NonNull final Geocache cache) {
         final boolean ignored = OkapiClient.setIgnored(cache, this);
 
         if (ignored) {

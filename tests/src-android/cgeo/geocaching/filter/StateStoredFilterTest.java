@@ -1,22 +1,21 @@
 package cgeo.geocaching.filter;
 
-import junit.framework.TestCase;
-
 import cgeo.geocaching.models.Geocache;
 
+import junit.framework.TestCase;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class StateStoredFilterTest extends TestCase {
 
-    private StateFilterFactory.StateStoredFilter storedFilter;
-    private StateFilterFactory.StateNotStoredFilter notStoredFilter;
+    private StoredFilterFactory.StateStoredFilter storedFilter;
+    private StoredFilterFactory.StateNotStoredFilter notStoredFilter;
     private Geocache cache;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        storedFilter = new StateFilterFactory.StateStoredFilter();
-        notStoredFilter = new StateFilterFactory.StateNotStoredFilter();
+        storedFilter = new StoredFilterFactory.StateStoredFilter();
+        notStoredFilter = new StoredFilterFactory.StateNotStoredFilter();
         cache = new Geocache();
     }
 

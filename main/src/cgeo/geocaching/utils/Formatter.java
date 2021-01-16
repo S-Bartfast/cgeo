@@ -9,9 +9,11 @@ import cgeo.geocaching.models.PocketQuery;
 import cgeo.geocaching.models.Waypoint;
 
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.format.DateUtils;
+import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -26,6 +28,8 @@ public final class Formatter {
 
     /** Text separator used for formatting texts */
     public static final String SEPARATOR = " · ";
+    public static final int MINUTES_PER_DAY = 24 * 60;
+    public static final float DAYS_PER_MONTH = 365F / 12; // on average
 
     private Formatter() {
         // Utility class
@@ -88,6 +92,18 @@ public final class Formatter {
             return ((SimpleDateFormat) dateFormat).toPattern();
         }
         return StringUtils.EMPTY; // should not happen
+    }
+
+    /**
+     * Generate a numeric date string with date format "yyyy-MM-dd"
+     *
+     * @param date
+     *            milliseconds since the epoch
+     * @return the formatted string
+     */
+    @NonNull
+    public static String formatDateForFilename(final long date) {
+        return new SimpleDateFormat("yyyy-MM-dd HH-mm", Locale.getDefault()).format(date);
     }
 
     /**
@@ -175,9 +191,6 @@ public final class Formatter {
         if (cache.isPremiumMembersOnly()) {
             infos.add(CgeoApplication.getInstance().getString(R.string.cache_premium));
         }
-        if (cache.isOffline()) {
-            infos.add(CgeoApplication.getInstance().getString(R.string.cache_offline));
-        }
         return StringUtils.join(infos, SEPARATOR);
     }
 
@@ -209,6 +222,11 @@ public final class Formatter {
 
     private static String formatDT(final float value) {
         return String.format(Locale.getDefault(), "%.1f", value);
+    }
+
+    @NonNull
+    public static String formatFavCount(final int favCount) {
+        return favCount >= 10000 ? (favCount / 1000) + "k" : favCount >= 0 ? Integer.toString(favCount) : "?";
     }
 
     @NonNull
@@ -251,6 +269,31 @@ public final class Formatter {
             default:
                 return CgeoApplication.getInstance().getResources().getQuantityString(R.plurals.days_ago, days, days);
         }
+    }
+
+    @NonNull
+    public static String formatStoredAgo(final long updatedTimeMillis) {
+        final long minutes = (System.currentTimeMillis() - updatedTimeMillis) / MINUTE_IN_MILLIS;
+        final long days = minutes / MINUTES_PER_DAY;
+
+        final String ago;
+        if (updatedTimeMillis == 0L) {
+            ago = "";
+        } else if (minutes < 15) {
+            ago = CgeoApplication.getInstance().getString(R.string.cache_offline_time_mins_few);
+        } else if (minutes < 60) {
+            ago = CgeoApplication.getInstance().getResources().getQuantityString(R.plurals.cache_offline_about_time_mins, (int) minutes, (int) minutes);
+        } else if (days < 2) {
+            ago = CgeoApplication.getInstance().getResources().getQuantityString(R.plurals.cache_offline_about_time_hours, (int) (minutes / 60), (int) (minutes / 60));
+        } else if (days < DAYS_PER_MONTH) {
+            ago = CgeoApplication.getInstance().getResources().getQuantityString(R.plurals.cache_offline_about_time_days, (int) days, (int) days);
+        } else if (days < 365) {
+            ago = CgeoApplication.getInstance().getResources().getQuantityString(R.plurals.cache_offline_about_time_months, (int) (days / DAYS_PER_MONTH), (int) (days / DAYS_PER_MONTH));
+        } else {
+            ago = CgeoApplication.getInstance().getString(R.string.cache_offline_about_time_year);
+        }
+
+        return CgeoApplication.getInstance().getString(R.string.cache_offline_stored) + "\n" + ago;
     }
 
     /**

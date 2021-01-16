@@ -4,6 +4,7 @@ import cgeo.geocaching.CacheDetailActivity;
 import cgeo.geocaching.R;
 import cgeo.geocaching.enumerations.CacheListType;
 import cgeo.geocaching.filter.IFilter;
+import cgeo.geocaching.list.AbstractList;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.sensors.GeoData;
@@ -19,18 +20,12 @@ import cgeo.geocaching.utils.AngleUtils;
 import cgeo.geocaching.utils.CalendarUtils;
 import cgeo.geocaching.utils.Formatter;
 import cgeo.geocaching.utils.Log;
-import cgeo.geocaching.utils.MapUtils;
+import cgeo.geocaching.utils.MapMarkerUtils;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.res.Resources;
-import android.graphics.drawable.BitmapDrawable;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
-import android.text.Spannable;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.StrikethroughSpan;
+import android.graphics.Paint;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -39,23 +34,29 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.ImageView;
+import android.widget.SectionIndexer;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import butterknife.BindView;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
-public class CacheListAdapter extends ArrayAdapter<Geocache> {
+public class CacheListAdapter extends ArrayAdapter<Geocache> implements SectionIndexer {
 
     private LayoutInflater inflater = null;
     private static CacheComparator cacheComparator = null;
@@ -70,6 +71,8 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
     private final Set<CompassMiniView> compasses = new LinkedHashSet<>();
     private final Set<DistanceView> distances = new LinkedHashSet<>();
     private final CacheListType cacheListType;
+    private List<AbstractList> storedLists = null;
+    private String currentListTitle = "";
     private final Resources res;
     /** Resulting list of caches */
     private final List<Geocache> list;
@@ -105,6 +108,11 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
         }
     }
 
+    // variables for section indexer
+    private HashMap<String, Integer> mapFirstPosition;
+    private HashMap<String, Integer> mapSection;
+    private String[] sections;
+
     /**
      * view holder for the cache list adapter
      *
@@ -112,6 +120,7 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
     public static class ViewHolder extends AbstractViewHolder {
         @BindView(R.id.checkbox) protected CheckBox checkbox;
         @BindView(R.id.log_status_mark) protected ImageView logStatusMark;
+        @BindView(R.id.text_icon) protected ImageView textIcon;
         @BindView(R.id.text) protected TextView text;
         @BindView(R.id.distance) protected DistanceView distance;
         @BindView(R.id.favorite) protected TextView favorite;
@@ -135,6 +144,15 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
         this.list = list;
         this.cacheListType = cacheListType;
         checkSpecialSortOrder();
+        buildFastScrollIndex();
+    }
+
+    public void setStoredLists(final List<AbstractList> storedLists) {
+        this.storedLists = storedLists;
+    }
+
+    public void setCurrentListTitle(final String currentListTitle) {
+        this.currentListTitle = currentListTitle;
     }
 
     /**
@@ -285,7 +303,7 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
     }
 
     public void forceSort() {
-        if (CollectionUtils.isEmpty(list) || selectMode) {
+        if (CollectionUtils.isEmpty(list)) {
             return;
         }
 
@@ -313,9 +331,6 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
 
     private void updateSortByDistance() {
         if (CollectionUtils.isEmpty(list)) {
-            return;
-        }
-        if (selectMode) {
             return;
         }
         if ((System.currentTimeMillis() - lastSort) <= PAUSE_BETWEEN_LIST_SORT) {
@@ -374,21 +389,20 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
     public static void updateViewHolder(final ViewHolder holder, final Geocache cache, final Resources res) {
         if (cache.isFound() && cache.isLogOffline()) {
             holder.logStatusMark.setImageResource(R.drawable.mark_green_orange);
-            holder.logStatusMark.setVisibility(View.VISIBLE);
         } else if (cache.isFound()) {
             holder.logStatusMark.setImageResource(R.drawable.mark_green_more);
-            holder.logStatusMark.setVisibility(View.VISIBLE);
         } else if (cache.isLogOffline()) {
             holder.logStatusMark.setImageResource(R.drawable.mark_orange);
-            holder.logStatusMark.setVisibility(View.VISIBLE);
+        } else if (cache.isDNF()) {
+            holder.logStatusMark.setImageResource(R.drawable.mark_red);
         } else {
-            holder.logStatusMark.setVisibility(View.GONE);
+            holder.logStatusMark.setImageResource(R.drawable.mark_transparent);
         }
-        holder.text.setCompoundDrawablesWithIntrinsicBounds(MapUtils.getCacheMarker(res, cache, holder.cacheListType), null, null, null);
+        holder.textIcon.setImageDrawable(MapMarkerUtils.getCacheMarker(res, cache, holder.cacheListType).getDrawable());
     }
 
     @Override
-    public View getView(final int position, final View rowView, final ViewGroup parent) {
+    public View getView(final int position, final View rowView, @NonNull final ViewGroup parent) {
         if (inflater == null) {
             inflater = LayoutInflater.from(getContext());
         }
@@ -428,29 +442,24 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
         compasses.add(holder.direction);
         holder.direction.setTargetCoords(cache.getCoords());
 
-        Spannable spannable = null;
         if (cache.isDisabled() || cache.isArchived() || CalendarUtils.isPastEvent(cache)) { // strike
-            spannable = Spannable.Factory.getInstance().newSpannable(cache.getName());
-            spannable.setSpan(new StrikethroughSpan(), 0, spannable.toString().length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            holder.text.setPaintFlags(holder.text.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+        } else {
+            holder.text.setPaintFlags(holder.text.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
         }
         if (cache.isArchived()) { // red color
-            if (spannable == null) {
-                spannable = Spannable.Factory.getInstance().newSpannable(cache.getName());
-            }
-            spannable.setSpan(new ForegroundColorSpan(ContextCompat.getColor(getContext(), R.color.archived_cache_color)), 0, spannable.toString().length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            holder.text.setTextColor(ContextCompat.getColor(getContext(), R.color.archived_cache_color));
+        } else {
+            holder.text.setTextColor(ContextCompat.getColor(getContext(), lightSkin ? R.color.text_light : R.color.text_dark));
         }
 
-        if (spannable != null) {
-            holder.text.setText(spannable, TextView.BufferType.SPANNABLE);
-        } else {
-            holder.text.setText(cache.getName(), TextView.BufferType.NORMAL);
-        }
+        holder.text.setText(cache.getName(), TextView.BufferType.NORMAL);
         holder.cacheListType = cacheListType;
         updateViewHolder(holder, cache, res);
 
         final int inventorySize = cache.getInventoryItems();
         if (inventorySize > 0) {
-            holder.inventory.setText(Integer.toString(inventorySize));
+            holder.inventory.setText(String.format(Locale.getDefault(), "%d", inventorySize));
             holder.inventory.setVisibility(View.VISIBLE);
         } else {
             holder.inventory.setVisibility(View.GONE);
@@ -481,13 +490,10 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
             } else if (StringUtils.isNotBlank(cache.getDirectionImg())) {
                 holder.dirImg.setVisibility(View.INVISIBLE);
                 holder.direction.setVisibility(View.GONE);
-                DirectionImage.fetchDrawable(cache.getDirectionImg()).observeOn(AndroidSchedulers.mainThread()).subscribe(new Consumer<BitmapDrawable>() {
-                    @Override
-                    public void accept(final BitmapDrawable bitmapDrawable) {
-                        if (cache == holder.cache) {
-                            holder.dirImg.setImageDrawable(bitmapDrawable);
-                            holder.dirImg.setVisibility(View.VISIBLE);
-                        }
+                DirectionImage.fetchDrawable(cache.getDirectionImg()).observeOn(AndroidSchedulers.mainThread()).subscribe(bitmapDrawable -> {
+                    if (cache == holder.cache) {
+                        holder.dirImg.setImageDrawable(bitmapDrawable);
+                        holder.dirImg.setVisibility(View.VISIBLE);
                     }
                 });
             } else {
@@ -496,7 +502,8 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
             }
         }
 
-        holder.favorite.setText(Integer.toString(cache.getFavoritePoints()));
+        final int favCount = cache.getFavoritePoints();
+        holder.favorite.setText(Formatter.formatFavCount(favCount));
 
         int favoriteBack;
         // set default background, neither vote nor rating may be available
@@ -521,6 +528,20 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
             holder.info.setText(Formatter.formatCacheInfoLong(cache));
         }
 
+        // optionally show list infos
+        if (null != storedLists) {
+            final List<String> infos = new ArrayList<>();
+            final Set<Integer> lists = cache.getLists();
+            for (final AbstractList temp : storedLists) {
+                if (lists.contains(temp.id) && !temp.title.equals(currentListTitle)) {
+                    infos.add(temp.title);
+                }
+            }
+            if (!infos.isEmpty()) {
+                holder.info.append("\n" + StringUtils.join(infos, Formatter.SEPARATOR));
+            }
+        }
+
         return v;
     }
 
@@ -529,6 +550,7 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
         super.notifyDataSetChanged();
         distances.clear();
         compasses.clear();
+        buildFastScrollIndex();
     }
 
     private static class SelectionCheckBoxListener implements View.OnClickListener {
@@ -610,21 +632,25 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
                     return false;
                 }
 
-                // left to right swipe
-                if ((e2.getX() - e1.getX()) > SWIPE_MIN_DISTANCE && Math.abs(velocityX) > Math.abs(velocityY)) {
-                    if (!adapter.selectMode) {
-                        adapter.switchSelectMode();
-                        cache.setStatusChecked(true);
-                    }
-                    return true;
-                }
+                // horizontal swipe
+                if (Math.abs(velocityX) > Math.abs(velocityY)) {
 
-                // right to left swipe
-                if ((e1.getX() - e2.getX()) > SWIPE_MIN_DISTANCE && Math.abs(velocityX) > Math.abs(velocityY)) {
-                    if (adapter.selectMode) {
-                        adapter.switchSelectMode();
+                    // left to right swipe
+                    if ((e2.getX() - e1.getX()) > SWIPE_MIN_DISTANCE) {
+                        if (!adapter.selectMode) {
+                            adapter.switchSelectMode();
+                            cache.setStatusChecked(true);
+                        }
+                        return true;
                     }
-                    return true;
+
+                    // right to left swipe
+                    if ((e1.getX() - e2.getX()) > SWIPE_MIN_DISTANCE) {
+                        if (adapter.selectMode) {
+                            adapter.switchSelectMode();
+                        }
+                        return true;
+                    }
                 }
             } catch (final Exception e) {
                 Log.w("CacheListAdapter.FlingGesture.onFling", e);
@@ -717,4 +743,53 @@ public class CacheListAdapter extends ArrayAdapter<Geocache> {
     public boolean isEventsOnly() {
         return eventsOnly;
     }
+
+    // methods for section indexer
+
+    private void buildFastScrollIndex() {
+        mapFirstPosition = new LinkedHashMap<>();
+        final ArrayList<String> sectionList = new ArrayList<>();
+        String lastComparable = null;
+        for (int x = 0; x < list.size(); x++) {
+            final String comparable = getComparable(x);
+            if (!StringUtils.equals(lastComparable, comparable)) {
+                mapFirstPosition.put(comparable, x);
+                sectionList.add(comparable);
+                lastComparable = comparable;
+            }
+        }
+        sections = new String[sectionList.size()];
+        sectionList.toArray(sections);
+        mapSection = new LinkedHashMap<>();
+        for (int x = 0; x < sections.length; x++) {
+            mapSection.put(sections[x], x);
+        }
+    }
+
+    public int getPositionForSection(final int section) {
+        if (sections == null || sections.length == 0) {
+            return 0;
+        }
+        final Integer position = mapFirstPosition.get(sections[Math.max(0, Math.min(section, sections.length - 1))]);
+        return null == position ? 0 : position;
+    }
+
+    public int getSectionForPosition(final int position) {
+        final Integer section = mapSection.get(getComparable(position));
+        return null == section ? 0 : section;
+    }
+
+    public Object[] getSections() {
+        return sections;
+    }
+
+    @NonNull
+    private String getComparable(final int position) {
+        try {
+            return getCacheComparator().getSortableSection(list.get(position));
+        } catch (NullPointerException e) {
+            return " ";
+        }
+    }
+
 }

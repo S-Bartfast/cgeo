@@ -5,21 +5,16 @@ import cgeo.geocaching.location.Viewport;
 import cgeo.geocaching.models.ICoordinates;
 import cgeo.geocaching.network.Network;
 import cgeo.geocaching.network.Parameters;
-import cgeo.geocaching.utils.AndroidRxUtils;
 import cgeo.geocaching.utils.LeastRecentlyUsedSet;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
-import io.reactivex.Single;
-import io.reactivex.functions.Function;
+import io.reactivex.rxjava3.core.Single;
 import okhttp3.Response;
 
 /**
@@ -41,7 +36,7 @@ public class Tile {
     static {
         for (int z = ZOOMLEVEL_MIN; z <= ZOOMLEVEL_MAX; z++) {
             NUMBER_OF_TILES[z] = 1 << z;
-            NUMBER_OF_PIXELS[z] = TILE_SIZE * 1 << z;
+            NUMBER_OF_PIXELS[z] = TILE_SIZE << z;
         }
     }
 
@@ -122,6 +117,7 @@ public class Tile {
     }
 
     @Override
+    @NonNull
     public String toString() {
         return String.format(Locale.US, "(%d/%d), zoom=%d", tileX, tileY, zoomLevel);
     }
@@ -236,36 +232,6 @@ public class Tile {
         try {
             final Response response = Network.getRequest(url, params, new Parameters("Referer", referer)).blockingGet();
             return Single.just(response).flatMap(Network.getResponseData);
-        } catch (final Exception e) {
-            return Single.error(e);
-        }
-    }
-
-    /** Request .png image for a tile. Return as soon as the request has been made, before the answer has been
-     * read and processed.
-     *
-     * @return A single with one element, or an IOException
-     */
-    static Single<Bitmap> requestMapTile(final Parameters params) {
-        try {
-            final Response response = Network.getRequest(GCConstants.URL_MAP_TILE, params, new Parameters("Referer", GCConstants.URL_LIVE_MAP)).blockingGet();
-            return Single.just(response)
-                    .flatMap(new Function<Response, Single<Bitmap>>() {
-                        @Override
-                        public Single<Bitmap> apply(final Response response) {
-                            try {
-                                if (response.isSuccessful()) {
-                                    final Bitmap bitmap = BitmapFactory.decodeStream(response.body().byteStream());
-                                    if (bitmap != null) {
-                                        return Single.just(bitmap);
-                                    }
-                                }
-                                return Single.error(new IOException("could not decode bitmap"));
-                            } finally {
-                                response.close();
-                            }
-                        }
-                    }).subscribeOn(AndroidRxUtils.computationScheduler);
         } catch (final Exception e) {
             return Single.error(e);
         }

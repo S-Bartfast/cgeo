@@ -1,11 +1,13 @@
 package cgeo.geocaching.connector;
 
-import cgeo.geocaching.models.Image;
 import cgeo.geocaching.log.LogType;
+import cgeo.geocaching.log.ReportProblemType;
 import cgeo.geocaching.log.TrackableLog;
+import cgeo.geocaching.models.Geocache;
+import cgeo.geocaching.models.Image;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Calendar;
 import java.util.List;
@@ -23,7 +25,8 @@ public interface ILoggingManager {
             @NonNull Calendar date,
             @NonNull String log,
             @Nullable String logPassword,
-            @NonNull List<TrackableLog> trackableLogs);
+            @NonNull List<TrackableLog> trackableLogs,
+            @NonNull ReportProblemType reportProblem);
 
     @NonNull
     ImageResult postLogImage(String logId,
@@ -39,5 +42,14 @@ public interface ILoggingManager {
 
     void init();
 
-    int getPremFavoritePoints();
+
+    Long getMaxImageUploadSize();
+
+    boolean isImageCaptionMandatory();
+
+    @NonNull
+    List<ReportProblemType> getReportProblemTypes(@NonNull Geocache geocache);
+
+    boolean hasTrackableLoadError();
+
 }

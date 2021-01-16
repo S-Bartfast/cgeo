@@ -3,42 +3,53 @@ package cgeo.geocaching;
 import cgeo.geocaching.activity.AbstractActionBarActivity;
 import cgeo.geocaching.enumerations.LoadFlags;
 import cgeo.geocaching.location.Geopoint;
+import cgeo.geocaching.location.ProximityNotificationByCoords;
 import cgeo.geocaching.location.Units;
 import cgeo.geocaching.log.LoggingUI;
 import cgeo.geocaching.maps.DefaultMap;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Waypoint;
+import cgeo.geocaching.permission.PermissionHandler;
+import cgeo.geocaching.permission.PermissionRequestContext;
+import cgeo.geocaching.permission.RestartLocationPermissionGrantedCallback;
+import cgeo.geocaching.sensors.DirectionData;
 import cgeo.geocaching.sensors.GeoData;
 import cgeo.geocaching.sensors.GeoDirHandler;
-import cgeo.geocaching.sensors.GpsStatusProvider.Status;
+import cgeo.geocaching.sensors.GnssStatusProvider.Status;
 import cgeo.geocaching.sensors.Sensors;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.speech.SpeechService;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.ui.CompassView;
+import cgeo.geocaching.ui.TextSpinner;
 import cgeo.geocaching.ui.WaypointSelectionActionProvider;
 import cgeo.geocaching.utils.AngleUtils;
 import cgeo.geocaching.utils.Formatter;
 import cgeo.geocaching.utils.Log;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.media.AudioManager;
+import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.widget.TextView;
 import android.widget.ToggleButton;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.util.Arrays;
+import java.util.Locale;
+
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.functions.Consumer;
 import org.apache.commons.lang3.StringUtils;
 
 public class CompassActivity extends AbstractActionBarActivity {
@@ -53,6 +64,11 @@ public class CompassActivity extends AbstractActionBarActivity {
     @BindView(R.id.destination) protected TextView destinationTextView;
     @BindView(R.id.cacheinfo) protected TextView cacheInfoView;
     @BindView(R.id.use_compass) protected ToggleButton useCompassSwitch;
+    @BindView(R.id.device_heading) protected TextView deviceHeading;
+    @BindView(R.id.device_orientation_label) protected TextView deviceOrientationLabel;
+    @BindView(R.id.device_orientation_azimuth) protected TextView deviceOrientationAzimuth;
+    @BindView(R.id.device_orientation_pitch) protected TextView deviceOrientationPitch;
+    @BindView(R.id.device_orientation_roll) protected TextView deviceOrientationRoll;
 
     /**
      * Destination cache, may be null
@@ -65,17 +81,34 @@ public class CompassActivity extends AbstractActionBarActivity {
     private Geopoint dstCoords = null;
     private float cacheHeading = 0;
     private String description;
+    private ProximityNotificationByCoords proximityNotification = null;
+    private final TextSpinner<DirectionData.DeviceOrientation> deviceOrientationMode = new TextSpinner<>();
 
     @Override
     public void onCreate(final Bundle savedInstanceState) {
-        onCreate(savedInstanceState, R.layout.compass_activity);
+        super.onCreate(savedInstanceState, R.layout.compass_activity);
         ButterKnife.bind(this);
+
+        deviceOrientationMode
+            .setValues(Arrays.asList(new DirectionData.DeviceOrientation[]{DirectionData.DeviceOrientation.AUTO, DirectionData.DeviceOrientation.FLAT, DirectionData.DeviceOrientation.UPRIGHT}))
+            .setDisplayMapper(d -> getString(R.string.device_orientation) + ": " + getString(d.resId))
+            .setCheckedMapper(d -> d == DirectionData.DeviceOrientation.AUTO)
+            .setTextClickThrough(true)
+            .setChangeListener(d -> Settings.setDeviceOrientationMode(d));
+
+        reconfigureGui();
 
         // get parameters
         final Bundle extras = getIntent().getExtras();
         if (extras == null) {
             finish();
             return;
+        }
+
+        // prepare proximity notification
+        proximityNotification = Settings.isSpecificProximityNotificationActive() ? new ProximityNotificationByCoords() : null;
+        if (null != proximityNotification) {
+            proximityNotification.setTextNotifications(this);
         }
 
         // cache must exist, except for "any point navigation"
@@ -89,10 +122,10 @@ public class CompassActivity extends AbstractActionBarActivity {
             final int waypointId = extras.getInt(Intents.EXTRA_WAYPOINT_ID);
             final Waypoint waypoint = DataStore.loadWaypoint(waypointId);
             if (waypoint != null) {
-                setTarget(waypoint);
+                setTarget(waypoint, cache);
             }
         } else if (extras.containsKey(Intents.EXTRA_COORDS)) {
-            setTarget(extras.<Geopoint> getParcelable(Intents.EXTRA_COORDS), extras.getString(Intents.EXTRA_COORD_DESCRIPTION));
+            setTarget(extras.getParcelable(Intents.EXTRA_COORDS), extras.getString(Intents.EXTRA_COORD_DESCRIPTION));
         } else if (cache != null) {
             setTarget(cache);
         } else {
@@ -107,17 +140,6 @@ public class CompassActivity extends AbstractActionBarActivity {
             setTitle(StringUtils.defaultIfBlank(extras.getString(Intents.EXTRA_NAME), res.getString(R.string.navigation)));
         }
 
-        if (Sensors.getInstance().hasCompassCapabilities()) {
-            useCompassSwitch.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(final View view) {
-                    Settings.setUseCompass(((ToggleButton) view).isChecked());
-                }
-            });
-            useCompassSwitch.setVisibility(View.VISIBLE);
-        } else {
-            useCompassSwitch.setVisibility(View.GONE);
-        }
 
         // make sure we can control the TTS volume
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
@@ -125,8 +147,20 @@ public class CompassActivity extends AbstractActionBarActivity {
 
     @Override
     public void onResume() {
-        onResume(geoDirHandler.start(GeoDirHandler.UPDATE_GEODIR),
-                Sensors.getInstance().gpsStatusObservable().observeOn(AndroidSchedulers.mainThread()).subscribe(gpsStatusHandler));
+        super.onResume();
+
+        // resume location access
+        PermissionHandler.executeIfLocationPermissionGranted(this,
+                new RestartLocationPermissionGrantedCallback(PermissionRequestContext.CompassActivity) {
+
+                    @Override
+                    public void executeAfter() {
+                        resumeDisposables(geoDirHandler.start(GeoDirHandler.UPDATE_GEODIR),
+                                Sensors.getInstance().gpsStatusObservable().observeOn(AndroidSchedulers.mainThread()).subscribe(gpsStatusHandler));
+                    }
+                });
+
+
         forceRefresh();
     }
 
@@ -138,7 +172,7 @@ public class CompassActivity extends AbstractActionBarActivity {
     }
 
     @Override
-    public void onConfigurationChanged(final Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull final Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
         setContentView(R.layout.compass_activity);
@@ -149,18 +183,29 @@ public class CompassActivity extends AbstractActionBarActivity {
     }
 
     private void forceRefresh() {
+        reconfigureGui();
 
+        final Sensors sensors = Sensors.getInstance();
+        geoDirHandler.updateGeoDir(sensors.currentGeo(), sensors.currentDirection());
+    }
+
+    /** refresh GUI elements which can be changed e.g. after a new configuration was issued (e.g. turning from portrait into landscape and vice versa */
+    private void reconfigureGui() {
         // Force a refresh of location and direction when data is available.
         final Sensors sensors = Sensors.getInstance();
 
         // reset the visibility of the compass toggle button if the device does not support it.
         if (sensors.hasCompassCapabilities()) {
             useCompassSwitch.setChecked(Settings.isUseCompass());
+            useCompassSwitch.setOnClickListener(view -> {
+                Settings.setUseCompass(((ToggleButton) view).isChecked());
+                findViewById(R.id.device_orientation_mode).setVisibility(sensors.hasCompassCapabilities() && useCompassSwitch.isChecked() ? View.VISIBLE : View.GONE);
+            });
         } else {
             useCompassSwitch.setVisibility(View.GONE);
         }
-
-        geoDirHandler.updateGeoDir(sensors.currentGeo(), sensors.currentDirection());
+        deviceOrientationMode.setTextView(findViewById(R.id.device_orientation_mode)).set(Settings.getDeviceOrientationMode());
+        findViewById(R.id.device_orientation_mode).setVisibility(sensors.hasCompassCapabilities() && useCompassSwitch.isChecked() ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -179,7 +224,7 @@ public class CompassActivity extends AbstractActionBarActivity {
 
             @Override
             public void onWaypointSelected(final Waypoint waypoint) {
-                setTarget(waypoint);
+                setTarget(waypoint, null);
             }
 
             @Override
@@ -192,42 +237,31 @@ public class CompassActivity extends AbstractActionBarActivity {
     @Override
     public boolean onPrepareOptionsMenu(final Menu menu) {
         super.onPrepareOptionsMenu(menu);
-        menu.findItem(R.id.menu_tts_start).setVisible(!SpeechService.isRunning());
-        menu.findItem(R.id.menu_tts_stop).setVisible(SpeechService.isRunning());
-        menu.findItem(R.id.menu_hint).setVisible(cache != null);
+        menu.findItem(R.id.menu_hint).setVisible(cache != null && StringUtils.isNotEmpty(cache.getHint()));
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(final MenuItem item) {
         final int id = item.getItemId();
-        switch (id) {
-            case R.id.menu_map:
-                if (waypoint != null) {
-                    DefaultMap.startActivityCoords(this, waypoint.getCoords(), waypoint.getWaypointType(), waypoint.getName());
-                } else if (cache != null) {
-                    DefaultMap.startActivityGeoCode(this, cache.getGeocode());
-                } else {
-                    DefaultMap.startActivityCoords(this, dstCoords, null, null);
-                }
-                return true;
-            case R.id.menu_tts_start:
-                SpeechService.startService(this, dstCoords);
-                invalidateOptionsMenuCompatible();
-                return true;
-            case R.id.menu_tts_stop:
-                SpeechService.stopService(this);
-                invalidateOptionsMenuCompatible();
-                return true;
-            case R.id.menu_hint:
-                cache.showHintToast(this);
-                return true;
-            default:
-                if (LoggingUI.onMenuItemSelected(item, this, cache, null)) {
-                    return true;
-                }
+        if (id == R.id.menu_map) {
+            if (waypoint != null) {
+                DefaultMap.startActivityCoords(this, waypoint.getCoords(), waypoint.getWaypointType(), waypoint.getName());
+            } else if (cache != null) {
+                DefaultMap.startActivityGeoCode(this, cache.getGeocode());
+            } else {
+                DefaultMap.startActivityCoords(this, dstCoords, null, null);
+            }
+        } else if (id == R.id.menu_tts_toggle) {
+            SpeechService.toggleService(this, dstCoords);
+        } else if (id == R.id.menu_hint) {
+            cache.showHintToast(this);
+        } else if (LoggingUI.onMenuItemSelected(item, this, cache, null)) {
+            return true; // to satisfy static code analysis
+        } else {
+            return super.onOptionsItemSelected(item);
         }
-        return super.onOptionsItemSelected(item);
+        return true;
     }
 
     private void setTarget(@NonNull final Geopoint coords, final String newDescription) {
@@ -238,11 +272,11 @@ public class CompassActivity extends AbstractActionBarActivity {
         Log.d("destination set: " + newDescription + " (" + dstCoords + ")");
     }
 
-    private void setTarget(@NonNull final Waypoint waypointIn) {
+    private void setTarget(@NonNull final Waypoint waypointIn, @Nullable final Geocache cache) {
         waypoint = waypointIn;
         final Geopoint coordinates = waypointIn.getCoords();
         if (coordinates != null) { // handled by WaypointSelectionActionProvider, but the compiler doesn't know
-            setTarget(coordinates, waypointIn.getName());
+            setTarget(coordinates, waypointIn.getName() + (null != cache ? Formatter.SEPARATOR + Formatter.formatCacheInfoShort(cache) : ""));
         }
     }
 
@@ -252,6 +286,9 @@ public class CompassActivity extends AbstractActionBarActivity {
 
     private void setDestCoords(final Geopoint coords) {
         dstCoords = coords;
+        if (null != proximityNotification) {
+            proximityNotification.setReferencePoint(coords);
+        }
         if (dstCoords == null) {
             return;
         }
@@ -269,6 +306,7 @@ public class CompassActivity extends AbstractActionBarActivity {
         cacheInfoView.setText(description);
     }
 
+    @SuppressLint("SetTextI18n")
     private void updateDistanceInfo(final GeoData geo) {
         if (dstCoords == null) {
             return;
@@ -279,6 +317,7 @@ public class CompassActivity extends AbstractActionBarActivity {
         headingView.setText(Math.round(cacheHeading) + "°");
     }
 
+    @SuppressLint("SetTextI18n")
     private final Consumer<Status> gpsStatusHandler = new Consumer<Status>() {
         @Override
         public void accept(final Status gpsStatus) {
@@ -290,9 +329,13 @@ public class CompassActivity extends AbstractActionBarActivity {
         }
     };
 
+    private static final double[] altitudeReadings = { 0.0d, 0.0d, 0.0d, 0.0d, 0.0d };
+    private static int altitudeReadingPos = 0;
+
+    @SuppressLint("SetTextI18n")
     private final GeoDirHandler geoDirHandler = new GeoDirHandler() {
         @Override
-        public void updateGeoDir(@NonNull final GeoData geo, final float dir) {
+        public void updateGeoDirData(@NonNull final GeoData geo, final DirectionData dir) {
             try {
                 navType.setText(res.getString(geo.getLocationProvider().resourceId));
 
@@ -302,11 +345,29 @@ public class CompassActivity extends AbstractActionBarActivity {
                     navAccuracy.setText(null);
                 }
 
-                navLocation.setText(geo.getCoords().toString());
+                // remember new altitude reading, and calculate average from past MAX_READINGS readings
+                if (geo.hasAltitude() && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || geo.getVerticalAccuracyMeters() > 0.0)) {
+                    altitudeReadings[altitudeReadingPos] = geo.getAltitude();
+                    altitudeReadingPos = (++altitudeReadingPos) % altitudeReadings.length;
+                }
+                double averageAltitude = altitudeReadings[0];
+                for (int i = 1; i < altitudeReadings.length; i++) {
+                    averageAltitude += altitudeReadings[i];
+                }
+                if (altitudeReadings.length > 0) {
+                    averageAltitude /= (double) altitudeReadings.length;
+                }
+                navLocation.setText(geo.getCoords().toString() + Formatter.SEPARATOR + Units.getDistanceFromMeters((float) averageAltitude));
 
                 updateDistanceInfo(geo);
 
-                updateNorthHeading(AngleUtils.getDirectionNow(dir));
+                updateNorthHeading(AngleUtils.getDirectionNow(dir.getDirection()));
+
+                updateDeviceHeadingAndOrientation(dir);
+
+                if (null != proximityNotification) {
+                    proximityNotification.onUpdateGeoData(geo);
+                }
             } catch (final RuntimeException e) {
                 Log.w("Failed to update location", e);
             }
@@ -317,6 +378,50 @@ public class CompassActivity extends AbstractActionBarActivity {
         if (compassView != null) {
             compassView.updateNorth(northHeading, cacheHeading);
         }
+    }
+
+    @SuppressLint("SetTextI18n")
+    private void updateDeviceHeadingAndOrientation(final DirectionData dir) {
+
+        if (dir.hasOrientation()) {
+            deviceOrientationAzimuth.setText(formatDecimalFloat(dir.getAzimuth()) + "° /");
+            deviceOrientationPitch.setText(formatDecimalFloat(dir.getPitch()) + "° /");
+            deviceOrientationRoll.setText(formatDecimalFloat(dir.getRoll()).substring(1) + "°");
+
+            deviceOrientationLabel.setVisibility(View.VISIBLE);
+            deviceOrientationAzimuth.setVisibility(View.VISIBLE);
+            deviceOrientationPitch.setVisibility(View.VISIBLE);
+            deviceOrientationRoll.setVisibility(View.VISIBLE);
+        } else {
+            deviceOrientationLabel.setVisibility(View.INVISIBLE);
+            deviceOrientationAzimuth.setVisibility(View.INVISIBLE);
+            deviceOrientationPitch.setVisibility(View.INVISIBLE);
+            deviceOrientationRoll.setVisibility(View.INVISIBLE);
+        }
+
+        float direction = dir.getDirection();
+        while (direction < 0f) {
+            direction += 360f;
+        }
+        while (direction >= 360f) {
+            direction -= 360f;
+        }
+        deviceHeading.setText(String.format(Locale.getDefault(), "%3.1f°", direction));
+
+        if (deviceOrientationMode.get() == DirectionData.DeviceOrientation.AUTO) {
+            deviceOrientationMode.setTextDisplayMapper(d -> getString(R.string.device_orientation) + ": " + getString(dir.getDeviceOrientation().resId) + " (" + getString(DirectionData.DeviceOrientation.AUTO.resId) + ")");
+        } else {
+            deviceOrientationMode.setTextDisplayMapper(d -> getString(R.string.device_orientation) + ": " + getString(d.resId));
+        }
+    }
+
+    /** formats a float to a decimal with length 4 and no places behind comma. Handles "-0" case. */
+    private static String formatDecimalFloat(final float value) {
+        final String formattedValue = String.format(Locale.US, "% 4.0f", value);
+        if (formattedValue.endsWith("-0")) {
+            return "   0";
+        }
+        return formattedValue;
     }
 
     public static void startActivityWaypoint(final Context context, final Waypoint waypoint) {

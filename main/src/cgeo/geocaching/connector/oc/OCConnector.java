@@ -2,19 +2,26 @@ package cgeo.geocaching.connector.oc;
 
 import cgeo.geocaching.R;
 import cgeo.geocaching.connector.AbstractConnector;
+import cgeo.geocaching.connector.UserAction;
 import cgeo.geocaching.connector.capability.Smiley;
 import cgeo.geocaching.connector.capability.SmileyCapability;
+import cgeo.geocaching.log.LogEntry;
 import cgeo.geocaching.log.LogType;
 import cgeo.geocaching.models.Geocache;
+import cgeo.geocaching.network.Network;
+import cgeo.geocaching.utils.ShareUtils;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import android.net.Uri;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
 public class OCConnector extends AbstractConnector implements SmileyCapability {
 
@@ -59,6 +66,30 @@ public class OCConnector extends AbstractConnector implements SmileyCapability {
     @NonNull
     public String getCacheUrl(@NonNull final Geocache cache) {
         return getCacheUrlPrefix() + cache.getGeocode();
+    }
+
+    @Override
+    @Nullable
+    public String getCacheLogUrl(@NonNull final Geocache cache, final @NonNull LogEntry logEntry) {
+        final String internalId = getServiceSpecificLogId(logEntry.serviceLogId);
+        if (!StringUtils.isBlank(internalId)) {
+            return getCacheUrl(cache) + "&log=A#log" + internalId;
+        }
+        return null;
+    }
+
+    @Override
+    public String getServiceSpecificLogId(final String logId) {
+        //OC serviceLogId has format: 'log_uuid:internal_id', 'internal_id' may be missing
+        //the id usable in other contexts is the internal_id
+        if (StringUtils.isBlank(logId)) {
+            return null;
+        }
+        final int idx = logId.lastIndexOf(":");
+        if (idx >= 0) {
+            return logId.substring(idx + 1);
+        }
+        return null; //do not display uuid
     }
 
     @Override
@@ -107,15 +138,23 @@ public class OCConnector extends AbstractConnector implements SmileyCapability {
         // different opencaching installations have different supported URLs
 
         // host.tld/geocode
-        final String shortHost = StringUtils.remove(getHost(), "www.");
-        final String firstLevel = StringUtils.substringAfter(url, shortHost + "/");
+        final String shortHost = getShortHost();
+        final Uri uri = Uri.parse(url);
+        if (!StringUtils.containsIgnoreCase(uri.getHost(), shortHost)) {
+            return null;
+        }
+        final String path = uri.getPath();
+        if (StringUtils.isBlank(path)) {
+            return null;
+        }
+        final String firstLevel = path.substring(1);
         if (canHandle(firstLevel)) {
             return firstLevel;
         }
 
         // host.tld/viewcache.php?wp=geocode
-        final String secondLevel = StringUtils.substringAfter(url, shortHost + "/viewcache.php?wp=");
-        return canHandle(secondLevel) ? secondLevel : super.getGeocodeFromUrl(url);
+        final String secondLevel = path.startsWith("/viewcache.php") ? uri.getQueryParameter("wp") : "";
+        return (secondLevel != null && canHandle(secondLevel)) ? secondLevel : super.getGeocodeFromUrl(url);
     }
 
     @Override
@@ -130,7 +169,7 @@ public class OCConnector extends AbstractConnector implements SmileyCapability {
     }
 
     @Override
-    public boolean getHttps() {
+    public boolean isHttps() {
         return https;
     }
 
@@ -148,5 +187,17 @@ public class OCConnector extends AbstractConnector implements SmileyCapability {
      */
     protected String getSchemeAndHost() {
         return getSchemePart() + host;
+    }
+
+    @Override
+    @NonNull
+    public List<UserAction> getUserActions(final UserAction.UAContext user) {
+        final List<UserAction> actions = super.getUserActions(user);
+        // caches stored before parsing the UserId will not have the field set, so we must check for correct existence here
+        if (NumberUtils.isDigits(user.userName)) {
+            actions.add(new UserAction(R.string.user_menu_open_browser, context -> ShareUtils.openUrl(context.getContext(), getSchemeAndHost() + "/viewprofile.php?userid=" + Network.encode(context.userName))));
+            actions.add(new UserAction(R.string.user_menu_send_message, context -> ShareUtils.openUrl(context.getContext(), getSchemeAndHost() + "/mailto.php?userid=" + Network.encode(context.userName))));
+        }
+        return actions;
     }
 }

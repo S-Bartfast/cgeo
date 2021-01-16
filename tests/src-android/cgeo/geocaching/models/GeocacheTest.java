@@ -1,16 +1,5 @@
 package cgeo.geocaching.models;
 
-import org.apache.commons.lang3.StringUtils;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-
 import cgeo.CGeoTestCase;
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.R;
@@ -20,6 +9,16 @@ import cgeo.geocaching.enumerations.WaypointType;
 import cgeo.geocaching.list.StoredList;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.log.LogType;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ListIterator;
 
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
@@ -47,17 +46,16 @@ public class GeocacheTest extends CGeoTestCase {
         final Geocache two = new Geocache();
 
         // identity
-        //noinspection EqualsWithItself
-        assertThat(one.equals(one)).isTrue();
+        assertThat(one).isEqualTo(one);
 
         // different objects without geocode shall not be equal
-        assertThat(one.equals(two)).isFalse();
+        assertThat(one).isNotEqualTo(two);
 
         one.setGeocode("geocode");
         two.setGeocode("geocode");
 
         // different objects with same geocode shall be equal
-        assertThat(one.equals(two)).isTrue();
+        assertThat(one).isEqualTo(two);
     }
 
     public static void testGeocodeUppercase() {
@@ -67,11 +65,17 @@ public class GeocacheTest extends CGeoTestCase {
     }
 
     public final void testUpdateWaypointFromNote() {
-        assertWaypointsParsed("Test N51 13.888 E007 03.444", 1);
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "", "", "", WaypointType.OWN));
+        assertWaypointsParsed("Test N51 13.888 E007 03.444", wpList);
     }
 
     public final void testUpdateWaypointsFromNote() {
-        assertWaypointsParsed("Test N51 13.888 E007 03.444 Test N51 13.233 E007 03.444 Test N51 09.123 E007 03.444", 3);
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 13.233 E007 03.444"), "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 09.123 E007 03.444"), "", "", "", WaypointType.OWN));
+        assertWaypointsParsed("Test N51 13.888 E007 03.444 Test N51 13.233 E007 03.444 Test N51 09.123 E007 03.444",  wpList);
     }
 
     /**
@@ -79,33 +83,161 @@ public class GeocacheTest extends CGeoTestCase {
      * Duplicates should be ignored, so expected size is 2.
      */
     public final void testUpdateWaypointsFromNoteWithDuplicates() {
-        assertWaypointsParsed("Test N51 13.888 E007 03.444 Test N51 13.233 E007 03.444 Test N51 13.888 E007 03.444", 2);
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 13.233 E007 03.444"), "", "", "", WaypointType.OWN));
+        assertWaypointsParsed("Test N51 13.888 E007 03.444 Test N51 13.233 E007 03.444 Test N51 13.888 E007 03.444", wpList);
     }
 
-    private void assertWaypointsParsed(final String note, final int expectedWaypoints) {
-        recordMapStoreFlags();
+    public final void testUpdateWaypointsWithEmptyCoordsFromNote() {
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", null, "", "", "", WaypointType.OWN));
+        assertWaypointsParsed("Test N51 13.888 E007 03.444\nTest (NO-COORD)", wpList);
+    }
 
-        try {
-            setMapStoreFlags(false, false);
+    /**
+     * The second and the third waypoints have different names.
+     * So expected size is 3.
+     */
+    public final void testUpdateWaypointsWithTwoEmptyCoordsFromNote() {
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", null, "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", null, "Test", "", "", WaypointType.OWN));
+        assertWaypointsParsed("Test N51 13.888 E007 03.444\nTest (NO-COORD)\n@Test (NO-COORD)", wpList);
+    }
 
-            final Geocache cache = new Geocache();
-            final String geocode = "Test" + System.nanoTime();
-            cache.setGeocode(geocode);
-            cache.setWaypoints(new ArrayList<Waypoint>(), false);
-            for (int i = 0; i < 2; i++) {
-                cache.setPersonalNote(note);
-                cache.addWaypointsFromNote();
-                final List<Waypoint> waypoints = cache.getWaypoints();
-                assertThat(waypoints).isNotNull();
-                assertThat(waypoints).hasSize(expectedWaypoints);
-                final Waypoint waypoint = waypoints.get(0);
-                assertThat(waypoint.getCoords()).isEqualTo(new Geopoint("N51 13.888 E007 03.444"));
-                assertThat(waypoint.getName()).isEqualTo(CgeoApplication.getInstance().getString(R.string.cache_personal_note) + " 1");
-                cache.store(Collections.singleton(StoredList.TEMPORARY_LIST.id), null);
+    /**
+     * The second and the third waypoints have same names.
+     * So expected size is 2.
+     */
+    public final void testUpdateWaypointsWithDuplicateEmptyCoordsFromNote() {
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", null, "Test", "", "", WaypointType.OWN));
+        assertWaypointsParsed("Test N51 13.888 E007 03.444\n@Test (NO-COORD)\n@Test (NO-COORD)", wpList);
+    }
+
+    /**
+     * The new waypoints are not contained in the cache.
+     * So expected size is 3.
+     */
+    public final void testUpdateExistingWaypointsWithEmptyCoordsFromNoteAddWaypoint() {
+        final Geocache cache = new Geocache();
+        final String geocode = "Test" + System.nanoTime();
+        cache.setGeocode(geocode);
+        cache.setCoords(new Geopoint(40.0, 8.0));
+        final Waypoint userWaypoint = new Waypoint("Test", WaypointType.OWN, true);
+        userWaypoint.setCoords(new Geopoint(42.0, 10.0));
+        cache.addOrChangeWaypoint(userWaypoint, false);
+        saveFreshCacheToDB(cache);
+
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint(42.0, 10.0), "Test", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "Personal note 1", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", null, "Personal note 2", "", "", WaypointType.OWN));
+        assertWaypointsParsed(cache, "Test N51 13.888 E007 03.444\nTest (NO-COORD)", wpList);
+
+        removeCacheCompletely(geocode);
+    }
+
+    /**
+     * The second waypoint has same name but empty coordinates.
+     * So expected size is 2.
+     */
+    public final void testUpdateExistingWaypointWithEmptyCoordsFromNoteWithSameNameAndCoordinates() {
+        final Geocache cache = new Geocache();
+        final String geocode = "Test" + System.nanoTime();
+        cache.setGeocode(geocode);
+        cache.setCoords(new Geopoint(40.0, 8.0));
+        final Waypoint userWaypoint = new Waypoint("Test", WaypointType.OWN, true);
+        userWaypoint.setCoords(new Geopoint(42.0, 10.0));
+        cache.addOrChangeWaypoint(userWaypoint, false);
+        saveFreshCacheToDB(cache);
+
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", new Geopoint(42.0, 10.0), "Test", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "Personal note 1", "", "", WaypointType.OWN));
+        // wpList.add(new Waypoint("", null, "Test", "", "", WaypointType.OWN));
+        assertWaypointsParsed(cache, "Test N51 13.888 E007 03.444\n@Test (NO-COORD)", wpList);
+
+        removeCacheCompletely(geocode);
+    }
+
+    /**
+     * The second waypoint has same name and empty coordinates.
+     * So expected size is 2.
+     */
+    public final void testUpdateExistingWaypointWithEmptyCoordsFromNoteWithSameName() {
+        final Geocache cache = new Geocache();
+        final String geocode = "Test" + System.nanoTime();
+        cache.setGeocode(geocode);
+        cache.setCoords(new Geopoint(40.0, 8.0));
+        final Waypoint userWaypoint = new Waypoint("Test", WaypointType.OWN, true);
+        userWaypoint.setCoords(null);
+        cache.addOrChangeWaypoint(userWaypoint, false);
+        saveFreshCacheToDB(cache);
+
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", null, "Test", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "Personal note 1", "", "", WaypointType.OWN));
+        assertWaypointsParsed(cache, "Test N51 13.888 E007 03.444\n@Test (NO-COORD)", wpList);
+
+        removeCacheCompletely(geocode);
+    }
+
+    /**
+     * The second waypoint has same name and empty coordinates, but different type.
+     * So expected size is 3.
+     */
+    public final void testUpdateExistingWaypointWithEmptyCoordsFromNoteWithSameNameDifferentType() {
+        final Geocache cache = new Geocache();
+        final String geocode = "Test" + System.nanoTime();
+        cache.setGeocode(geocode);
+        cache.setCoords(new Geopoint(40.0, 8.0));
+        final Waypoint userWaypoint = new Waypoint("Test", WaypointType.OWN, true);
+        userWaypoint.setCoords(null);
+        cache.addOrChangeWaypoint(userWaypoint, false);
+        saveFreshCacheToDB(cache);
+
+        final List<Waypoint> wpList = new ArrayList<>();
+        wpList.add(new Waypoint("", null, "Test", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", new Geopoint("N51 13.888 E007 03.444"), "Personal note 1", "", "", WaypointType.OWN));
+        wpList.add(new Waypoint("", null, "Test", "", "", WaypointType.FINAL));
+        assertWaypointsParsed(cache, "Test N51 13.888 E007 03.444\n@Test (F) (NO-COORD)", wpList);
+
+        removeCacheCompletely(geocode);
+    }
+
+    private void assertWaypointsParsed(final String note, final List<Waypoint> expectedWaypoints) {
+        final Geocache cache = new Geocache();
+        final String geocode = "Test" + System.nanoTime();
+        cache.setGeocode(geocode);
+        cache.setWaypoints(new ArrayList<>(), false);
+        assertWaypointsParsed(cache, note, expectedWaypoints);
+        cache.store(Collections.singleton(StoredList.TEMPORARY_LIST.id), null);
+        removeCacheCompletely(geocode);
+    }
+
+
+    private void assertWaypointsParsed(final Geocache cache, final String note, final List<Waypoint> expectedWaypoints) {
+        cache.setPersonalNote(note);
+        cache.addWaypointsFromNote();
+        final List<Waypoint> waypoints = cache.getWaypoints();
+        assertThat(waypoints).isNotNull();
+        assertThat(waypoints).hasSize(expectedWaypoints.size());
+
+        final ListIterator<Waypoint> expectedWpIterator = expectedWaypoints.listIterator();
+        for (int i = 0; i < expectedWaypoints.size(); i++) {
+            final Waypoint waypoint = waypoints.get(i);
+            final Waypoint expectedWaypoint = expectedWpIterator.next();
+            assertThat(waypoint.getCoords()).isEqualTo(expectedWaypoint.getCoords());
+            String wpName = expectedWaypoint.getName();
+            if (wpName == null || wpName.isEmpty()) {
+                wpName = CgeoApplication.getInstance().getString(R.string.cache_personal_note) + " " + (i + 1);
             }
-            removeCacheCompletely(geocode);
-        } finally {
-            restoreMapStoreFlags();
+            assertThat(waypoint.getName()).isEqualTo(wpName);
         }
     }
 
@@ -162,7 +294,7 @@ public class GeocacheTest extends CGeoTestCase {
         download.setType(CacheType.MULTI);
         download.setCoords(new Geopoint(41.0, 9.0));
         download.setDescription("Test2");
-        download.setAttributes(Collections.<String>emptyList());
+        download.setAttributes(Collections.emptyList());
 
         download.gatherMissingFrom(stored);
 
@@ -220,7 +352,7 @@ public class GeocacheTest extends CGeoTestCase {
 
         assertThat(download.hasUserModifiedCoords()).as("merged user modified").isEqualTo(true);
         assertThat(download.getCoords()).as("merged coordinates").isEqualTo(new Geopoint(41.0, 9.0));
-        assertThat(download.getWaypoints().size()).as("merged waypoints size").isEqualTo(1);
+        assertThat(download.getWaypoints()).as("merged waypoints").hasSize(1);
         assertThat(download.getOriginalWaypoint().getCoords()).as("merged original wp").isEqualTo(new Geopoint(43.0, 11.0));
     }
 
@@ -342,74 +474,6 @@ public class GeocacheTest extends CGeoTestCase {
         final Geocache cache = new Geocache();
         cache.setName("GR8 01-01");
         assertThat(cache.getNameForSorting()).isEqualTo("GR000008 000001-000001");
-    }
-
-    public static void testGuessEventTime() {
-        assertTime("text 14:20 text", 14, 20);
-
-        // illegal minute/hour values
-        assertNoTime("text 30:40 text");
-        assertNoTime("text 14:90 text");
-
-        final String timeHours = CgeoApplication.getInstance().getString(R.string.cache_time_full_hours);
-
-        // full hour only
-        assertTime("text 16 " + timeHours, 16, 0);
-
-        // full hour, lower case
-        assertTime("text 16 " + StringUtils.lowerCase(timeHours), 16, 0);
-
-        // hour and minutes, different separators
-        assertTime("text 16:00 " + timeHours, 16, 0);
-        assertTime("text 16.00 " + timeHours, 16, 0);
-
-        // at the end of a sentence
-        assertTime("text 14:20.", 14, 20);
-
-        // including formatting
-        assertTime("<b>14:20</b>", 14, 20);
-
-        // time ranges
-        assertTime("<u><em>Uhrzeit:</em></u> 17-20 " + timeHours + "</span></strong>", 17, 0);
-        assertTime("von 11 bis 13 " + timeHours, 11, 0);
-        assertTime("from 11 to 13 " + timeHours, 11, 0);
-        assertTime("von 19.15 " + timeHours + " bis ca.20.30 " + timeHours + " statt", 19, 15);
-
-        // same without space between time and time string
-        assertTime("text 16" + timeHours, 16, 0);
-        assertTime("text 16" + StringUtils.lowerCase(timeHours), 16, 0);
-        assertTime("text 16:00" + timeHours, 16, 0);
-        assertTime("text 16.00" + timeHours, 16, 0);
-        assertTime("<u><em>Uhrzeit:</em></u> 17-20" + timeHours + "</span></strong>", 17, 0);
-        assertTime("von 11 bis 13" + timeHours, 11, 0);
-        assertTime("from 11 to 13" + timeHours, 11, 0);
-        assertTime("von 19.15" + timeHours + " bis ca.20.30 " + timeHours + " statt", 19, 15);
-
-        // #6285
-        assertTime("Dienstag den 31. Januar ab 18:00" + timeHours + " (das Logbuch liegt bis mind. 20:30 " + timeHours + " aus)", 18, 0);
-    }
-
-    public static void testGuessEventTimeShortDescription() {
-        final Geocache cache = new Geocache();
-        cache.setType(CacheType.EVENT);
-        cache.setDescription(StringUtils.EMPTY);
-        cache.setShortDescription("text 14:20 text");
-        assertThat(cache.getEventTimeMinutes()).isEqualTo(14 * 60 + 20);
-    }
-
-    private static void assertTime(final String description, final int hours, final int minutes) {
-        final Geocache cache = new Geocache();
-        cache.setDescription(description);
-        cache.setType(CacheType.EVENT);
-        final int minutesAfterMidnight = hours * 60 + minutes;
-        assertThat(cache.getEventTimeMinutes()).isEqualTo(minutesAfterMidnight);
-    }
-
-    private static void assertNoTime(final String description) {
-        final Geocache cache = new Geocache();
-        cache.setDescription(description);
-        cache.setType(CacheType.EVENT);
-        assertThat(cache.getEventTimeMinutes()).isEqualTo(-1);
     }
 
     public static void testGetPossibleLogTypes() throws Exception {

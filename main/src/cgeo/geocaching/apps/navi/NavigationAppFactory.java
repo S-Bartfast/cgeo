@@ -14,18 +14,18 @@ import cgeo.geocaching.apps.navi.OruxMapsApp.OruxOnlineMapApp;
 import cgeo.geocaching.apps.navi.SygicNavigationApp.SygicNavigationDrivingApp;
 import cgeo.geocaching.apps.navi.SygicNavigationApp.SygicNavigationWalkingApp;
 import cgeo.geocaching.location.Geopoint;
-import cgeo.geocaching.maps.mapsforge.v6.NewMap;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Waypoint;
 import cgeo.geocaching.settings.Settings;
+import cgeo.geocaching.ui.dialog.Dialogs;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.DialogInterface;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.view.MenuItem;
 import android.widget.ArrayAdapter;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,12 +43,6 @@ public final class NavigationAppFactory {
         RADAR(new RadarApp(), 1, R.string.pref_navigation_menu_radar),
         /** The selected map */
         INTERNAL_MAP(new InternalMap(), 2, R.string.pref_navigation_menu_internal_map),
-        /** The new internal map */
-        INTERNAL_MAP_NEW(new InternalMap(NewMap.class, R.string.cache_menu_mfbeta), 25, R.string.pref_navigation_menu_internal_new_map),
-        /** The internal static map activity, when stored */
-        STATIC_MAP(new StaticMapApp(), 3, R.string.pref_navigation_menu_static_map),
-        /** The internal static map activity, when not yet stored */
-        DOWNLOAD_STATIC_MAPS(new DownloadStaticMapsApp(), 20, R.string.pref_navigation_menu_static_map_download),
         /** The external Locus app */
         LOCUS(new LocusApp(), 4, R.string.pref_navigation_menu_locus),
         /** The external RMaps app */
@@ -63,8 +57,6 @@ public final class NavigationAppFactory {
         ORUX_MAPS(new OruxOnlineMapApp(), 9, R.string.pref_navigation_menu_oruxmaps),
         /** The external OruxMaps app */
         ORUX_MAPS_OFFLINE(new OruxOfflineMapApp(), 24, R.string.pref_navigation_menu_oruxmaps_offline),
-        /** The external navigon app */
-        NAVIGON(new NavigonApp(), 10, R.string.pref_navigation_menu_navigon),
         /** The external Sygic app in walking mode */
         SYGIC_WALKING(new SygicNavigationWalkingApp(), 11, R.string.pref_navigation_menu_sygic_walking),
         /** The external Sygic app in driving mode */
@@ -183,14 +175,11 @@ public final class NavigationAppFactory {
          */
         final ArrayAdapter<NavigationAppsEnum> adapter = new ArrayAdapter<>(activity, android.R.layout.select_dialog_item, items);
 
-        final AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        final AlertDialog.Builder builder = Dialogs.newBuilder(activity);
         builder.setTitle(R.string.cache_menu_navigate);
-        builder.setAdapter(adapter, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(final DialogInterface dialog, final int item) {
-                final NavigationAppsEnum selectedItem = adapter.getItem(item);
-                invokeNavigation(activity, cache, waypoint, destination, selectedItem.app);
-            }
+        builder.setAdapter(adapter, (dialog, item) -> {
+            final NavigationAppsEnum selectedItem = adapter.getItem(item);
+            invokeNavigation(activity, cache, waypoint, destination, selectedItem.app);
         });
         final AlertDialog alert = builder.create();
         alert.show();
@@ -352,14 +341,6 @@ public final class NavigationAppFactory {
 
         for (final NavigationAppsEnum navigationApp : installedNavigationApps) {
             if (navigationApp.id == navigationAppId) {
-                // redirect navigation tools between old and new map on the fly.
-                // if the global checkbox and the selected tools don't match, then offline maps may not work due to different theme versions
-                if (navigationApp == NavigationAppsEnum.INTERNAL_MAP && Settings.useNewMapAsDefault()) {
-                    return NavigationAppsEnum.INTERNAL_MAP_NEW.app;
-                }
-                if (navigationApp == NavigationAppsEnum.INTERNAL_MAP_NEW && !Settings.useNewMapAsDefault()) {
-                    return NavigationAppsEnum.INTERNAL_MAP.app;
-                }
                 return navigationApp.app;
             }
         }

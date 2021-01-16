@@ -1,7 +1,6 @@
 package cgeo.geocaching.network;
 
 import cgeo.geocaching.CgeoApplication;
-import cgeo.geocaching.utils.Charsets;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -10,8 +9,10 @@ import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAdapter.CreateNdefMessageCallback;
-import android.nfc.NfcEvent;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
+
+import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -31,7 +32,7 @@ public class AndroidBeam {
     public static Uri getUri(final Intent intent) {
         if (NfcAdapter.ACTION_NDEF_DISCOVERED.equals(intent.getAction())) {
             final NdefMessage msg = (NdefMessage) intent.getExtras().getParcelableArray(NfcAdapter.EXTRA_NDEF_MESSAGES)[0];
-            return Uri.parse("http://" + new String(msg.getRecords()[0].getPayload(), Charsets.UTF_8));
+            return Uri.parse("http://" + new String(msg.getRecords()[0].getPayload(), StandardCharsets.UTF_8));
         }
         return intent.getData();
     }
@@ -64,21 +65,18 @@ public class AndroidBeam {
     }
 
     private static CreateNdefMessageCallback createMessageCallback(final ActivitySharingInterface sharingInterface) {
-        return new NfcAdapter.CreateNdefMessageCallback() {
-            @Override
-            public NdefMessage createNdefMessage(final NfcEvent event) {
-                String uri = sharingInterface.getAndroidBeamUri();
-                if (uri == null) {
-                    return null;
-                }
-                // normalize our modified URLs for beaming
-                uri = StringUtils.replace(uri, "geocaching.com//", "geocaching.com/");
-                final NdefRecord[] records = {
-                        NdefRecord.createUri(uri),
-                        NdefRecord.createApplicationRecord(CgeoApplication.getInstance().getPackageName())
-                };
-                return new NdefMessage(records);
+        return event -> {
+            String uri = sharingInterface.getAndroidBeamUri();
+            if (uri == null) {
+                return null;
             }
+            // normalize our modified URLs for beaming
+            uri = StringUtils.replace(uri, "geocaching.com//", "geocaching.com/");
+            final NdefRecord[] records = {
+                    NdefRecord.createUri(uri),
+                    NdefRecord.createApplicationRecord(CgeoApplication.getInstance().getPackageName())
+            };
+            return new NdefMessage(records);
         };
     }
 

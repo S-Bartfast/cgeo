@@ -1,83 +1,161 @@
 package cgeo.geocaching.ui;
 
+import cgeo.geocaching.R;
+import cgeo.geocaching.settings.Settings;
+import static cgeo.geocaching.models.CalcState.ERROR_CHAR;
+
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
-import android.support.v4.content.ContextCompat;
 import android.text.Editable;
 import android.util.AttributeSet;
 import android.view.View;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import androidx.core.content.ContextCompat;
 
 import java.io.Serializable;
 
-import cgeo.geocaching.R;
-
-import static cgeo.geocaching.models.CalcState.ERROR_CHAR;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
- * This class derives from EditButton and handles all the attribures that are unique to this particular application of button.
- **
- * In particular this button stores three values:
- * 1. The value obtained from cache coordinates that were at the time the calculater war crreated
- * 2. An 'AutoChar' which is the next alphabetic character used when the user clicks on the button
- * 3. A custom character which is a specific value assigned by user by perforning a long-click.
+ * This class derives from EditButton and handles all the attributes that are unique to this particular application of button.
  *
- * The button displayed one of these values as appropriate as the text on the button.
- **/
-
+ * In particular this button stores three values:
+ * 1. The value obtained from the waypoint coordinates that was used at the time the calculator was created
+ * 2. An 'AutoChar' which is the next alphabetic character used when the user clicks on the button
+ * 3. A custom character which is a specific value assigned by the user when performing a long-click.
+ *
+ * The button displays one of these values as appropriate as the text of the button.
+ */
 public class CalculateButton extends EditButton {
 
-    // Flag values used to desognate that no AutoChar has been set
-    static final char EMPTY_CHAR = '-';
+    /** Flag values used to designate that no AutoChar has been set */
+    private static final char EMPTY_CHAR = '-';
 
-    // The three stated the button can be put into
+    /** The three states the button can be put into */
     private enum ValueType {
-        INPUT_VAL, AUTO_CHAR, CUSTOM
+        INPUT_VAL {
+            @Override
+            char getLabel(final ButtonData buttonData) {
+                return buttonData.inputVal;
+            }
+
+            @Override
+            char setAutoChar(final ButtonData buttonData, final char nextChar) {
+                buttonData.autoChar = nextChar;
+                return nextChar;
+            }
+
+        },
+        AUTO_CHAR {
+            @Override
+            char getLabel(final ButtonData buttonData) {
+                return buttonData.autoChar;
+            }
+
+            @Override
+            char setAutoChar(final ButtonData buttonData, final char autoChar) {
+                char nextChar = autoChar;
+                buttonData.autoChar = nextChar++;
+                return nextChar;
+            }
+        },
+        BLANK {
+            @Override
+            char getLabel(final ButtonData buttonData) {
+                return ButtonData.BLANK;
+            }
+
+            @Override
+            char setAutoChar(final ButtonData buttonData, final char autoChar) {
+                buttonData.autoChar = autoChar;
+                return autoChar;
+            }
+        },
+        CUSTOM {
+            @Override
+            char getLabel(final ButtonData buttonData) {
+                return buttonData.customChar;
+            }
+
+            @Override
+            char setAutoChar(final ButtonData buttonData, final char autoChar) {
+                char nextChar = autoChar;
+                buttonData.autoChar = nextChar;
+                if ('A' <= buttonData.customChar && buttonData.customChar <= 'Z') {
+                    nextChar = buttonData.customChar;
+                    nextChar++;
+                }
+
+                return nextChar;
+            }
+        };
+
+        abstract char getLabel(ButtonData buttonData);
+        abstract char setAutoChar(ButtonData buttonData, char nextChar);
     }
 
-    // Every button (but the last) has a reference to the next button in the calculator.
-    // This reference is used to determine the alphabetic progression of the 'AutoChars'.
+    /**
+     * Every button (but the last) has a reference to the next button in the calculator.
+     * This reference is used to determine the alphabetic progression of the 'AutoChars'.
+     */
     private CalculateButton nextButton = null;
 
-    // The buttons own state is stored in a 'state' object to facilitate easy saving and restoring.
+    /**
+     * The buttons own state is stored in a 'state' object to facilitate easy saving and restoring
+     */
     private ButtonData buttonData;
 
-    // Data used to capture the state of this particular button such that it can be restored again later.
-    public static class ButtonData implements Serializable {
+    /**
+     * Data used to capture the state of this particular button such that it can be restored again later
+     */
+    public static class ButtonData implements Serializable, JSONAble {
+        private static final long serialVersionUID = -9043775643928797403L;
+
+        /** Character used to 'hide' button **/
+        public static final char BLANK = ' ';
+
         ValueType type = ValueType.INPUT_VAL;
-        char inputVal;                  // Value obtained from CoordinateInputDialog.
-        char autoChar = EMPTY_CHAR;     // Character obtained by automatically 'counting up' variable names.
-        char customChar;                // User defined character.
+        /** Value obtained from CoordinateInputDialog */
+        char inputVal;
+        /** Character obtained by automatically 'counting up' variable names */
+        char autoChar = EMPTY_CHAR;
+        /** User defined character */
+        char customChar;
 
-        ButtonData() { }
+        public ButtonData() { }
 
-        public ButtonData(final JSONObject jason) {
-            type = ValueType.values()[jason.optInt("type", 0)];
-            inputVal   = (char) jason.optInt("inputVal",   ERROR_CHAR);
-            autoChar   = (char) jason.optInt("autoChar",   ERROR_CHAR);
-            customChar = (char) jason.optInt("customChar", ERROR_CHAR);
+        public ButtonData(final JSONObject json) {
+            type = ValueType.values()[json.optInt("type", 0)];
+            inputVal   = (char) json.optInt("inputVal",   ERROR_CHAR);
+            autoChar   = (char) json.optInt("autoChar",   ERROR_CHAR);
+            customChar = (char) json.optInt("customChar", ERROR_CHAR);
         }
 
-        public JSONObject toJASON() throws JSONException {
-            final JSONObject rv = new JSONObject();
+        @Override
+        public JSONObject toJSON() throws JSONException {
+            final JSONObject returnValue = new JSONObject();
 
-            rv.put("type", type.ordinal());
-            rv.put("inputVal", inputVal);
-            rv.put("autoChar", autoChar);
-            rv.put("customChar", customChar);
+            returnValue.put("type", type.ordinal());
+            returnValue.put("inputVal", inputVal);
+            returnValue.put("autoChar", autoChar);
+            returnValue.put("customChar", customChar);
 
-            return rv;
+            return returnValue;
+        }
+    }
+
+    public static class ButtonDataFactory implements JSONAbleFactory<ButtonData> {
+        @Override
+        public ButtonData fromJSON(final JSONObject json) {
+            return new ButtonData(json);
         }
     }
 
     private class CoordDigitClickListener implements View.OnClickListener {
-
         @Override
         public void onClick(final View view) {
-            toggleType();
+            handleClick();
         }
     }
 
@@ -91,51 +169,65 @@ public class CalculateButton extends EditButton {
         setup();
     }
 
+    @Override
+    public void handleClick() {
+        toggleType();
+        super.handleClick();
+    }
+
     private void setup() {
         setData(new ButtonData());
         butt.setOnClickListener(new CoordDigitClickListener());
     }
 
-    // The 'Label' is the 'name' that is to be displayed on the button
+    /**
+     * The 'Label' is the 'name' that is to be displayed on the button
+     */
+    @Override
     public char getLabel() {
-        final char rv;
-        switch (getType()) {
-            case INPUT_VAL: rv = buttonData.inputVal;   break;
-            case AUTO_CHAR: rv = buttonData.autoChar;   break;
-            case CUSTOM:    rv = buttonData.customChar; break;
-            default:        rv = '*'; // Should never happen.
-        }
-
-        return rv;
+        return getType().getLabel(getData());
     }
 
-    public void setLabel(final char lable) {
-        butt.setText(String.valueOf(lable));
+    private void setLabel(final char label) {
+        butt.setText(String.valueOf(label));
     }
 
-    public ValueType getType() {
+    private ValueType getType() {
         return buttonData.type;
     }
 
-    public void setType(final ValueType type) {
+    private void setType(final ValueType type) {
         buttonData.type = type;
         setBackgroundColour();
     }
 
-    // Buttons displaying a custom value are given a 'steel-like' appearance so as to distinguish them from regular buttons.
+    /**
+     * Buttons displaying a custom value are given a 'steel-like' appearance so as to distinguish them from regular buttons
+     */
     private  void setBackgroundColour() {
-        if (buttonData.type == ValueType.CUSTOM) {
-            butt.setBackgroundColor(ContextCompat.getColor(getContext(), R.color.button_default));
-            butt.setTextColor(ContextCompat.getColor(getContext(), R.color.steel));
-            butt.setTypeface(null, Typeface.BOLD);
-        } else {
-            butt.setBackgroundResource(R.drawable.button_background_kitkat);
-            butt.setTextColor(Color.WHITE);
-            butt.setTypeface(null, Typeface.NORMAL);
+        switch (buttonData.type) {
+
+            case CUSTOM:
+            case BLANK:
+                butt.setBackgroundColor(ContextCompat.getColor(getContext(), R.color.button_default));
+                butt.setTextColor(ContextCompat.getColor(getContext(), R.color.steel));
+                butt.setTypeface(null, Typeface.BOLD);
+                break;
+
+            default:
+                final boolean lightSkin = Settings.isLightSkin();
+                final int normalText = ContextCompat.getColor(getContext(), lightSkin ? R.color.text_light : R.color.text_dark);
+
+                butt.setBackgroundResource(R.drawable.button_background_kitkat);
+                butt.setTextColor(normalText);
+                butt.setTypeface(null, Typeface.NORMAL);
+                break;
         }
     }
 
-    // Data used to preserve this buttons state between sessions.
+    /**
+     * Data used to preserve this buttons state between sessions
+     */
     public ButtonData getData() {
         return buttonData;
     }
@@ -150,7 +242,7 @@ public class CalculateButton extends EditButton {
         setInputVal(inputVal.charAt(0));
     }
 
-    public void setInputVal(final char inputVal) {
+    private void setInputVal(final char inputVal) {
         buttonData.inputVal = inputVal;
         updateButtonText();
     }
@@ -159,15 +251,18 @@ public class CalculateButton extends EditButton {
         return nextButton;
     }
 
-    public void setNextButton(final CalculateButton nextButton) {
+    public CalculateButton setNextButton(final CalculateButton nextButton) {
         this.nextButton = nextButton;
+
+        return nextButton;  // This is done so we can chain 'next' assignments.
     }
 
     /**
-     * This method is used to assign buttons alphabetically increasing names.
-     * @param currentChar:  values indicated that the autoChar will be and is updated appropriately for the next button based on the current button's state.
+     * This method is used to assign buttons alphabetically increasing names
+     *
+     * @param currentChar values indicated that the autoChar will be and is updated appropriately for the next button based on the current button's state
      */
-    public void setAutoChar(final char currentChar) {
+    private void setAutoChar(final char currentChar) {
         char nextChar = currentChar;
 
         if (nextChar < 'A') {
@@ -176,29 +271,10 @@ public class CalculateButton extends EditButton {
             nextChar = 'Z';
         }
 
-        switch (getType()) {
-            case INPUT_VAL:
-                buttonData.autoChar = nextChar;
-                break;
-
-            case AUTO_CHAR:
-                buttonData.autoChar = nextChar++;
-                break;
-
-            case CUSTOM:
-                buttonData.autoChar = nextChar;
-                if ('A' <= buttonData.customChar && buttonData.customChar <= 'Z') {
-                    nextChar = buttonData.customChar;
-                    nextChar++;
-                }
-                break;
-
-            default:
-        }
-
+        nextChar = getType().setAutoChar(getData(), nextChar);
         updateButtonText();
 
-        // Propogate auto-char
+        // Propagate auto-char
         if (nextButton != null) {
             nextButton.setAutoChar(nextChar);
         }
@@ -210,7 +286,8 @@ public class CalculateButton extends EditButton {
 
     /**
      * Sets a custom character for this button and updates the 'AutoChar' of subsequent buttons appropriately
-     * @param customChar: The 'name' to be assigned to this button
+     *
+     * @param customChar name to be assigned to this button
      */
     @Override
     public void setCustomChar(final char customChar) {
@@ -232,6 +309,7 @@ public class CalculateButton extends EditButton {
 
     /**
      * Restore this button to its original state (as in then the calculator was first created)
+     *
      * This method is called whenever the coordinate-format cache is manually changed.
      * This is prevent the values of unseen buttons (such as say 'Seconds' buttons) from confusing the user when they change formats.
      * It is also a nice way to clear the calculator and restart afresh.
@@ -247,14 +325,22 @@ public class CalculateButton extends EditButton {
     }
 
     /**
-     * When the user clicks on a button it's type is switched between 'AutoChar' and 'InputVal'.
+     * When the user clicks on a button it's type is switched between 'AutoChar' and 'InputVal'
+     *
      * Note: 'CustomValues' buttons will also be assigned to 'InputVal' as well.
      */
-    public void toggleType() {
-        if (getType() == ValueType.INPUT_VAL) {
-            setType(ValueType.AUTO_CHAR);
-        } else {
-            setType(ValueType.INPUT_VAL);
+    private void toggleType() {
+        switch (getType()) {
+            case INPUT_VAL:
+                setType(ValueType.AUTO_CHAR);
+                break;
+
+            case AUTO_CHAR:
+                setType(ValueType.BLANK);
+                break;
+
+            default:
+                setType(ValueType.INPUT_VAL);
         }
 
         setAutoChar(buttonData.autoChar);
@@ -263,4 +349,5 @@ public class CalculateButton extends EditButton {
     private void updateButtonText() {
         setLabel(getLabel());
     }
+
 }

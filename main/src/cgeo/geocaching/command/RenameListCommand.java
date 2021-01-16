@@ -4,10 +4,10 @@ import cgeo.geocaching.R;
 import cgeo.geocaching.list.StoredList;
 import cgeo.geocaching.storage.DataStore;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
 import android.app.Activity;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 public abstract class RenameListCommand extends AbstractCommand {
 
@@ -23,13 +23,7 @@ public abstract class RenameListCommand extends AbstractCommand {
     public void execute() {
         final StoredList list = DataStore.getList(listId);
         oldName = list.getTitle();
-        new StoredList.UserInterface(getContext()).promptForListRename(listId, new Runnable() {
-
-            @Override
-            public void run() {
-                RenameListCommand.super.execute();
-            }
-        });
+        new StoredList.UserInterface(getContext()).promptForListRename(listId, RenameListCommand.super::execute);
     }
 
     @Override

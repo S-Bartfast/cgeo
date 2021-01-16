@@ -12,10 +12,12 @@ import android.view.ContextMenu.ContextMenuInfo;
 import android.view.MenuItem;
 import android.view.View;
 
+import androidx.annotation.NonNull;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.apache.commons.collections4.CollectionUtils;
 
 public class ImagesActivity extends AbstractActionBarActivity {
@@ -87,7 +89,7 @@ public class ImagesActivity extends AbstractActionBarActivity {
     }
 
     @Override
-    public boolean onContextItemSelected(final MenuItem item) {
+    public boolean onContextItemSelected(@NonNull final MenuItem item) {
         if (imagesList.onContextItemSelected(item)) {
             return true;
         }

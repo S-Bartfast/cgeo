@@ -1,11 +1,12 @@
 package cgeo.geocaching.connector.ec;
 
+import org.junit.Test;
 import static org.assertj.core.api.Java6Assertions.assertThat;
-import junit.framework.TestCase;
 
-public class ECApiTest extends TestCase {
+public class ECApiTest {
 
-    public static void testGetIdFromGeocode() throws Exception {
+    @Test
+    public void testGetIdFromGeocode() throws Exception {
         assertThat(ECApi.getIdFromGeocode("EC242")).isEqualTo("242");
         assertThat(ECApi.getIdFromGeocode("ec242")).isEqualTo("242");
     }

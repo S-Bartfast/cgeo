@@ -2,11 +2,12 @@ package cgeo.geocaching.connector;
 
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.log.LogCacheActivity;
+import cgeo.geocaching.log.LogEntry;
 import cgeo.geocaching.log.LogType;
 import cgeo.geocaching.models.Geocache;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Collection;
 import java.util.List;
@@ -27,7 +28,7 @@ public interface IConnector {
      *            geocode of a cache
      * @return return {@code true}, if this connector is responsible for the cache
      */
-    boolean canHandle(@NonNull final String geocode);
+    boolean canHandle(@NonNull String geocode);
 
     /**
      * Return a new geocodes list, with only geocodes for which this connector is responsible.
@@ -36,27 +37,36 @@ public interface IConnector {
      *            list of geocodes of a cache
      * @return return a new stripped list
      */
-    Set<String> handledGeocodes(@NonNull final Set<String> geocodes);
+    Set<String> handledGeocodes(@NonNull Set<String> geocodes);
 
     /**
      * Get the browser URL for the given cache.
      *
      */
     @Nullable
-    String getCacheUrl(@NonNull final Geocache cache);
+    String getCacheUrl(@NonNull Geocache cache);
 
     /**
      * get long browser URL for the given cache
      *
      */
     @Nullable
-    String getLongCacheUrl(@NonNull final Geocache cache);
+    String getLongCacheUrl(@NonNull Geocache cache);
 
     /**
-     * enable/disable favorite points controls in cache details
-     *
+     * Get the browser URL for the given LogEntry. May return null if no url available or identifiable.
      */
-    boolean supportsFavoritePoints(@NonNull final Geocache cache);
+    @Nullable
+    String getCacheLogUrl(@NonNull Geocache cache, @NonNull LogEntry logEntry);
+
+    /**
+     * For a given service-log-id (as assigned by this IConnector and stored as service log id in log entries),
+     * returns the logid ready for usage in scenarios such as GUI display or GPX export
+     * May return null if there is no such log id.
+     */
+    @Nullable
+    String getServiceSpecificLogId(@Nullable String serviceLogId);
+
 
     /**
      * enable/disable logging controls in cache details
@@ -75,7 +85,19 @@ public interface IConnector {
      *
      */
     @NonNull
-    ILoggingManager getLoggingManager(@NonNull final LogCacheActivity activity, @NonNull final Geocache cache);
+    ILoggingManager getLoggingManager(@NonNull LogCacheActivity activity, @NonNull Geocache cache);
+
+    /**
+     * enable/disable changing the name of a cache
+     *
+     */
+    boolean supportsNamechange();
+
+    /**
+     * enable/disable changing the description of a cache
+     *
+     */
+    boolean supportsDescriptionchange();
 
     /**
      * Get host name of the connector server for dynamic loading of data.
@@ -87,7 +109,7 @@ public interface IConnector {
     /**
      * Return <tt>true<tt> if https must be used.
      */
-    boolean getHttps();
+    boolean isHttps();
 
     /**
      * Get url of the connector server for dynamic loading of data.
@@ -109,13 +131,13 @@ public interface IConnector {
      *
      */
     @NonNull
-    String getLicenseText(@NonNull final Geocache cache);
+    String getLicenseText(@NonNull Geocache cache);
 
     /**
      * return true if this is a ZIP file containing a GPX file
      *
      */
-    boolean isZippedGPXFile(@NonNull final String fileName);
+    boolean isZippedGPXFile(@NonNull String fileName);
 
     /**
      * return true if coordinates of a cache are reliable. only implemented by GC connector
@@ -130,7 +152,7 @@ public interface IConnector {
      *
      */
     @Nullable
-    String getGeocodeFromUrl(@NonNull final String url);
+    String getGeocodeFromUrl(@NonNull String url);
 
     /**
      * enable/disable uploading modified coordinates to website
@@ -167,7 +189,7 @@ public interface IConnector {
      * @param cache a cache that this connector must be able to handle
      * @return {@code true} if the current user is the cache owner, {@code false} otherwise
      */
-    boolean isOwner(@NonNull final Geocache cache);
+    boolean isOwner(@NonNull Geocache cache);
 
     /**
      * Check if the cache information is complete enough to be
@@ -221,18 +243,7 @@ public interface IConnector {
     Collection<String> getCapabilities();
 
     @NonNull
-    List<UserAction> getUserActions();
-
-    /**
-     * Check cache is eligible for adding to favorite
-     *
-     * @param cache
-     *         a cache that this connector must be able to handle
-     * @param type
-     *         a log type selected by the user
-     * @return true, when cache can be added to favorite
-     */
-    boolean supportsAddToFavorite(final Geocache cache, final LogType type);
+    List<UserAction> getUserActions(UserAction.UAContext user);
 
     /**
      * @return the URL to register a new account or {@code null}

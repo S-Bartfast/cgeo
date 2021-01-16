@@ -2,13 +2,13 @@ package cgeo.geocaching.ui;
 
 import cgeo.geocaching.activity.AbstractViewPagerActivity.PageViewCreator;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
 import android.os.Bundle;
-import android.support.v4.view.ViewPager;
 import android.view.View;
 import android.widget.ListView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.viewpager.widget.ViewPager;
 
 /**
  * {@link PageViewCreator} for {@link ListView}, which can save scroll state on purging a page from the

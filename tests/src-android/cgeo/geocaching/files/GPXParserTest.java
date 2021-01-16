@@ -1,10 +1,8 @@
 package cgeo.geocaching.files;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.IConnector;
-import cgeo.geocaching.connector.gc.GCConstants;
+import cgeo.geocaching.connector.gc.GCUtils;
 import cgeo.geocaching.enumerations.CacheSize;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.enumerations.LoadFlags;
@@ -22,7 +20,7 @@ import cgeo.geocaching.test.R;
 import cgeo.geocaching.utils.CalendarUtils;
 import cgeo.geocaching.utils.SynchronizedDateFormat;
 
-import android.support.annotation.RawRes;
+import androidx.annotation.RawRes;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,6 +35,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import org.apache.commons.compress.utils.IOUtils;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
     private static final SynchronizedDateFormat LOG_DATE_FORMAT = new SynchronizedDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US); // 2010-04-20T07:00:00Z
@@ -116,6 +115,19 @@ public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
         assertGc31j2hWaypoints(cache);
     }
 
+    public void testGc31j2hWptsEmptyCoord() throws IOException, ParserException {
+        removeCacheCompletely("GC31J2H");
+        final List<Geocache> caches = readGPX10(R.raw.gc31j2h, R.raw.gc31j2h_wpts_empty_coord);
+        assertThat(caches).hasSize(1);
+        final Geocache cache = caches.get(0);
+        assertGc31j2h(cache);
+
+        final List<Waypoint> waypointList = cache.getWaypoints();
+        assertThat(waypointList).isNotNull();
+        assertThat(waypointList).hasSize(2);
+        assertThat(waypointList.get(1).getCoords()).isNull();
+    }
+
     private static void checkWaypointType(final Collection<Geocache> caches, final String geocode, final int wpIndex, final WaypointType waypointType) {
         for (final Geocache cache : caches) {
             if (cache.getGeocode().equals(geocode)) {
@@ -144,11 +156,11 @@ public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
 
     public void testGc3abcd() throws IOException, ParserException {
         final List<Geocache> caches = readGPX10(R.raw.gc3abcd);
-        assertThat(caches.size()).isEqualTo(1);
+        assertThat(caches).hasSize(1);
         final Geocache gc3abcd = caches.get(0);
         assertThat(gc3abcd.getGeocode()).isEqualTo("GC3ABCD");
         final List<Waypoint> waypoints = gc3abcd.getWaypoints();
-        assertThat(waypoints.size()).isEqualTo(2);
+        assertThat(waypoints).hasSize(2);
     }
 
     private static void assertGc31j2h(final Geocache cache) {
@@ -350,7 +362,7 @@ public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
         assertThat(caches).hasSize(1);
         final Geocache cache = caches.get(0);
 
-        assertThat(String.valueOf(GCConstants.gccodeToGCId(cache.getGeocode()))).isEqualTo(cache.getCacheId());
+        assertThat(String.valueOf(GCUtils.gcCodeToGcId(cache.getGeocode()))).isEqualTo(cache.getCacheId());
     }
 
     private Geocache getFirstCache(@RawRes final int gpxResourceId) throws IOException, ParserException {
@@ -429,6 +441,34 @@ public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
         assertThat(ConnectorFactory.getConnector(lab)).isSameAs(unknownConnector);
     }
 
+    public void testLabCachesGeoGet() throws IOException, ParserException {
+        final String labName = "Starý Prostějov";
+        final String labGeoCode = "GC8DAEP";
+        final List<Geocache> caches = readGPX11(R.raw.lab_stary_prostejov);
+        assertThat(caches).hasSize(5);
+
+        for (final Geocache lab :caches) {
+            assertThat(lab).isNotNull();
+
+            // parse labs as virtual for the time being
+            assertThat(lab.getType()).isEqualTo(CacheType.VIRTUAL);
+
+            // no container size
+            assertThat(lab.getSize().comparable).isGreaterThan(CacheSize.VERY_LARGE.comparable);
+
+            // geocodes are just big hashes
+            assertThat(lab.getGeocode()).startsWith(labGeoCode.toUpperCase(Locale.US));
+
+            // other normal cache properties
+            assertThat(lab.getName()).startsWith(labName);
+            assertThat(lab.getShortDescription()).isNotBlank();
+            assertThat(lab.getDescription()).isNotBlank();
+
+            final IConnector unknownConnector = ConnectorFactory.getConnector(lab.getGeocode());
+            assertThat(ConnectorFactory.getConnector(lab)).isSameAs(unknownConnector);
+        }
+    }
+
     public void testGSAKGeocode() throws IOException, ParserException {
         final List<Geocache> caches = readGPX10(R.raw.liptov_gpx);
         assertThat(caches).hasSize(1);
@@ -463,7 +503,7 @@ public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
         assertThat(cache.getOwnerDisplayName()).isEqualTo("Berengarius");
         assertThat(cache.getType()).isEqualTo(CacheType.VIRTUAL);
         assertThat(cache.getLocation()).isEqualTo("Baden-Wurttemberg, Germany");
-        assertThat(cache.getUrl()).isEqualTo("http://www.terracaching.com/Cache/TCEHL");
+        assertThat(cache.getUrl()).isEqualTo("https://play.terracaching.com/Cache/TCEHL");
         assertThat(cache.getDescription()).startsWith("<b> Hier ruht </b>");
         assertThat(cache.getHint()).isEmpty();
 
@@ -507,6 +547,30 @@ public class GPXParserTest extends AbstractResourceInstrumentationTestCase {
         final Geocache cache = caches.get(0);
         final List<String> attributes = cache.getAttributes();
         assertThat(attributes).hasSize(2);
+    }
+
+    public void testOpenCachingGpxExtensionOtherCode() throws Exception {
+        final List<Geocache> caches = readGPX10(R.raw.oca521_gpx);
+        assertThat(caches).hasSize(1);
+
+        final Geocache cache = caches.get(0);
+        assertThat(cache.getDescription()).contains("GC287WQ");
+    }
+
+    public void testOpenCachingGpxExtensionRequiresPassword() throws Exception {
+        final List<Geocache> caches = readGPX10(R.raw.ocbb4a_gpx);
+        assertThat(caches).hasSize(1);
+
+        final Geocache cache = caches.get(0);
+        assertThat(cache.isLogPasswordRequired()).isTrue();
+    }
+
+    public void testOpenCachingGpxExtensionSize() throws Exception {
+        final List<Geocache> caches = readGPX10(R.raw.oc120f5_gpx);
+        assertThat(caches).hasSize(1);
+
+        final Geocache cache = caches.get(0);
+        assertThat(cache.getSize()).isEqualTo(CacheSize.NANO);
     }
 
 }

@@ -12,8 +12,9 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,6 +22,7 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,11 +35,12 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
-
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.reactivex.Completable;
-import io.reactivex.Single;
-import io.reactivex.functions.Function;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.functions.Function;
 import okhttp3.ConnectionSpec;
 import okhttp3.FormBody;
 import okhttp3.HttpUrl;
@@ -51,7 +54,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.TlsVersion;
 import org.apache.commons.compress.utils.IOUtils;
-import org.apache.commons.lang3.CharEncoding;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.jsoup.Jsoup;
@@ -65,6 +67,8 @@ public final class Network {
     private static final String NATIVE_USER_AGENT = "Mozilla/5.0 (Linux; U; Android 2.2; en-us; Nexus One Build/FRF91) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1";
 
     private static final Pattern PATTERN_PASSWORD = Pattern.compile("(?<=[\\?&])[Pp]ass(w(or)?d)?=[^&#$]+");
+
+    private static final ObjectMapper mapper = new ObjectMapper();
 
     private static final OkHttpClient OK_HTTP_CLIENT = getNewHttpClient();
 
@@ -83,7 +87,7 @@ public final class Network {
     }
 
     private static OkHttpClient.Builder enableTls12OnPreLollipop(final OkHttpClient.Builder builder) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN && Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
             try {
                 final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(
                         TrustManagerFactory.getDefaultAlgorithm());
@@ -119,14 +123,11 @@ public final class Network {
 
     private static final MediaType MEDIA_TYPE_APPLICATION_JSON = MediaType.parse("application/json; charset=utf-8");
 
-    public static final Function<String, Single<? extends ObjectNode>> stringToJson = new Function<String, Single<? extends ObjectNode>>() {
-        @Override
-        public Single<? extends ObjectNode> apply(final String s) {
-            try {
-                return Single.just((ObjectNode) JsonUtils.reader.readTree(s));
-            } catch (final Throwable t) {
-                return Single.error(t);
-            }
+    public static final Function<String, Single<? extends ObjectNode>> stringToJson = s -> {
+        try {
+            return Single.just((ObjectNode) JsonUtils.reader.readTree(s));
+        } catch (final Throwable t) {
+            return Single.error(t);
         }
     };
 
@@ -134,6 +135,18 @@ public final class Network {
 
     private Network() {
         // Utility class
+    }
+
+    /**
+     * PATCH HTTP request
+     *
+     * @param uri the URI to request
+     * @param headers the headers to add to the request
+     * @return a Single with the HTTP response, or an IOException
+     */
+    @NonNull
+    public static Single<Response> patchRequest(final String uri, final Parameters headers) {
+        return request("PATCH", uri, null, headers, null);
     }
 
     /**
@@ -162,6 +175,64 @@ public final class Network {
     }
 
     /**
+     * POST HTTP request and deserialize JSON answer
+     *
+     * @param uri the URI to request
+     * @param clazz the class to deserialize the JSON result to
+     * @param params the parameters to add to the GET request
+     * @param headers the headers to add to the GET request
+     * @param <T> the type to deserialize to
+     * @return a single with the deserialized value, or an IO exception
+     */
+    public static <T> Single<T> postRequest(final String uri, final Class<T> clazz, final Parameters params, final Parameters headers) {
+        return request("POST", uri, params, headers, null).flatMap(getResponseData).map(js -> mapper.readValue(js, clazz));
+    }
+
+    /**
+     * POST HTTP request and deserialize JSON answer
+     *
+     * @param uri the URI to request
+     * @param clazz the class to deserialize the JSON result to
+     * @param params the parameters to add to the GET request
+     * @param headers the headers to add to the GET request
+     * @param fileFieldName the name of the file field name
+     * @param fileContentType the content-type of the file
+     * @param file the file to include in the request
+     * @param <T> the type to deserialize to
+     * @return a single with the deserialized value, or an IO exception
+     */
+    public static <T> Single<T> postRequest(final String uri, final Class<T> clazz, final Parameters params, final Parameters headers,
+                                            final String fileFieldName, final String fileContentType, final File file) {
+        return postRequest(uri, params, headers, fileFieldName, fileContentType, file).flatMap(getResponseData).map(js -> mapper.readValue(js, clazz));
+    }
+
+
+    /**
+     *  POST HTTP request with Json POST DATA
+     *
+     * @param uri the URI to request
+     * @param headers http headers
+     * @param jsonObject the object to be serialized as json and added to the POST request
+     * @return a single with the HTTP response, or an IOException
+     */
+    @NonNull
+    public static Single<Response> postJsonRequest(final String uri, final Parameters headers, final Object jsonObject) throws JsonProcessingException {
+        final Builder request = new Builder().url(uri).post(RequestBody.create(MEDIA_TYPE_APPLICATION_JSON,
+                mapper.writeValueAsString(jsonObject)));
+        addHeaders(request, headers, null);
+        return RxOkHttpUtils.request(OK_HTTP_CLIENT, request.build());
+    }
+
+    @NonNull
+    public static <T> Single<T> postJsonRequest(final String uri, final Class<T> clazz, final Object jsonObject) throws JsonProcessingException {
+        final Builder request = new Builder().url(uri).post(RequestBody.create(MEDIA_TYPE_APPLICATION_JSON,
+                mapper.writeValueAsString(jsonObject)));
+        final Single<Response> response = RxOkHttpUtils.request(OK_HTTP_CLIENT, request.build());
+
+        return response.flatMap(getResponseData).map(js -> mapper.readValue(js, clazz));
+    }
+
+    /**
      *  POST HTTP request with Json POST DATA
      *
      * @param uri the URI to request
@@ -180,14 +251,15 @@ public final class Network {
      *
      * @param uri the URI to request
      * @param params the parameters to add to the POST request
+     * @param headers the headers to add to the POST request
      * @param fileFieldName the name of the file field name
      * @param fileContentType the content-type of the file
      * @param file the file to include in the request
      * @return a single with the HTTP response, or an IOException
      */
     @NonNull
-    public static Single<Response> postRequest(final String uri, final Parameters params,
-            final String fileFieldName, final String fileContentType, final File file) {
+    public static Single<Response> postRequest(final String uri, final Parameters params, final Parameters headers,
+                                               final String fileFieldName, final String fileContentType, final File file) {
         final MultipartBody.Builder entity = new MultipartBody.Builder().setType(MultipartBody.FORM);
         for (final ImmutablePair<String, String> param : params) {
             entity.addFormDataPart(param.left, param.right);
@@ -195,7 +267,7 @@ public final class Network {
         entity.addFormDataPart(fileFieldName, file.getName(),
                 RequestBody.create(MediaType.parse(fileContentType), file));
         final Builder request = new Request.Builder().url(uri).post(entity.build());
-        addHeaders(request, null, null);
+        addHeaders(request, headers, null);
         return RxOkHttpUtils.request(OK_HTTP_CLIENT, request.build());
     }
 
@@ -234,7 +306,11 @@ public final class Network {
                     body.add(param.left, param.right);
                 }
             }
-            builder.post(body.build());
+            if ("PATCH".equals(method)) {
+                builder.patch(body.build());
+            } else {
+                builder.post(body.build());
+            }
         }
 
         addHeaders(builder, headers, cacheFile);
@@ -259,6 +335,7 @@ public final class Network {
     private static class HeadersInterceptor implements Interceptor {
 
         @Override
+        @NonNull
         public Response intercept(final Interceptor.Chain chain) throws IOException {
             final Request request = chain.request().newBuilder()
                     .header("Accept-Charset", "utf-8,iso-8859-1;q=0.8,utf-16;q=0.8,*;q=0.7")
@@ -273,6 +350,7 @@ public final class Network {
     private static class LoggingInterceptor implements Interceptor {
 
         @Override
+        @NonNull
         public Response intercept(final Interceptor.Chain chain) throws IOException {
             final Request request = chain.request();
             final String reqLogStr = request.method() + " " + hidePassword(request.url().toString());
@@ -325,6 +403,21 @@ public final class Network {
         }
 
         return null;
+    }
+
+    /**
+     * Get HTTP request and deserialize JSON answer
+     *
+     * @param uri the URI to request
+     * @param clazz the class to deserialize the JSON result to
+     * @param params the parameters to add to the GET request
+     * @param headers the headers to add to the GET request
+     * @param <T> the type to deserialize to
+     * @return a single with the deserialized value, or an IO exception
+     */
+    @NonNull
+    public static <T> Single<T> getRequest(final String uri, final Class<T> clazz, @Nullable final Parameters params, @Nullable final Parameters headers) {
+        return getRequest(uri, params, headers).flatMap(getResponseData).map(js -> mapper.readValue(js, clazz));
     }
 
     /**
@@ -475,28 +568,25 @@ public final class Network {
      *   successful HTTP request with Content-Type "text/html", or containing an IOException otherwise.
      */
     public static Single<Document> getResponseDocument(final Single<Response> response) {
-        return response.flatMap(new Function<Response, Single<Document>>() {
-            @Override
-            public Single<Document> apply(final Response resp) {
-                try {
-                    final String uri = resp.request().url().toString();
-                    if (resp.isSuccessful()) {
-                        final MediaType mediaType = MediaType.parse(resp.header("content-type", ""));
-                        if (mediaType == null || !StringUtils.equals(mediaType.type(), "text") || !StringUtils.equals(mediaType.subtype(), "html")) {
-                            throw new IOException("unable to parse non HTML page with media type " + mediaType + " for " + uri);
-                        }
-                        final InputStream inputStream = resp.body().byteStream();
-                        try {
-                            return Single.just(Jsoup.parse(inputStream, null, uri));
-                        } finally {
-                            IOUtils.closeQuietly(inputStream);
-                            resp.close();
-                        }
+        return response.flatMap((Function<Response, Single<Document>>) resp -> {
+            try {
+                final String uri = resp.request().url().toString();
+                if (resp.isSuccessful()) {
+                    final MediaType mediaType = MediaType.parse(resp.header("content-type", ""));
+                    if (mediaType == null || !StringUtils.equals(mediaType.type(), "text") || !StringUtils.equals(mediaType.subtype(), "html")) {
+                        throw new IOException("unable to parse non HTML page with media type " + mediaType + " for " + uri);
                     }
-                    throw new IOException("unsuccessful request " + uri);
-                } catch (final Throwable t) {
-                    return Single.error(t);
+                    final InputStream inputStream = resp.body().byteStream();
+                    try {
+                        return Single.just(Jsoup.parse(inputStream, null, uri));
+                    } finally {
+                        IOUtils.closeQuietly(inputStream);
+                        resp.close();
+                    }
                 }
+                throw new IOException("unsuccessful request " + uri);
+            } catch (final Throwable t) {
+                return Single.error(t);
             }
         });
     }
@@ -518,31 +608,23 @@ public final class Network {
         }
     }
 
-    public static final Function<Response, Single<String>> getResponseData = new Function<Response, Single<String>>() {
-        @Override
-        public Single<String> apply(final Response response) {
-            if (response.isSuccessful()) {
-                try {
-                    return Single.just(response.body().string());
-                } catch (final IOException e) {
-                    return Single.error(e);
-                } finally {
-                    response.close();
-                }
+    public static final Function<Response, Single<String>> getResponseData = response -> {
+        if (response.isSuccessful()) {
+            try {
+                return Single.just(response.body().string());
+            } catch (final IOException e) {
+                return Single.error(e);
+            } finally {
+                response.close();
             }
-            return Single.error(new IOException("request was not successful"));
         }
+        return Single.error(new IOException("request was not successful: " + response));
     };
 
     /**
      * Filter only successful responses for use with flatMap.
      */
-    public static final Function<Response, Single<Response>> withSuccess = new Function<Response, Single<Response>>() {
-        @Override
-        public Single<Response> apply(final Response response) {
-            return response.isSuccessful() ? Single.just(response) : Single.<Response>error(new IOException("unsuccessful response: " + response));
-        }
-    };
+    public static final Function<Response, Single<Response>> withSuccess = response -> response.isSuccessful() ? Single.just(response) : Single.error(new IOException("unsuccessful response: " + response));
 
     /**
      * Wait until a request has completed and check its response status. An exception will be thrown if the
@@ -554,17 +636,7 @@ public final class Network {
         Completable.fromSingle(response.flatMap(withSuccess)).blockingAwait();
     }
 
-    public static final Function<Response, Single<String>> getResponseDataReplaceWhitespace = new Function<Response, Single<String>>() {
-        @Override
-        public Single<String> apply(final Response response) throws Exception {
-            return getResponseData.apply(response).map(new Function<String, String>() {
-                @Override
-                public String apply(final String s) {
-                    return TextUtils.replaceWhitespace(s);
-                }
-            });
-        }
-    };
+    public static final Function<Response, Single<String>> getResponseDataReplaceWhitespace = response -> getResponseData.apply(response).map(TextUtils::replaceWhitespace);
 
     @Nullable
     public static String rfc3986URLEncode(final String text) {
@@ -575,7 +647,7 @@ public final class Network {
     @Nullable
     public static String decode(final String text) {
         try {
-            return URLDecoder.decode(text, CharEncoding.UTF_8);
+            return URLDecoder.decode(text, StandardCharsets.UTF_8.name());
         } catch (final UnsupportedEncodingException e) {
             Log.e("Network.decode", e);
         }
@@ -585,7 +657,7 @@ public final class Network {
     @Nullable
     public static String encode(final String text) {
         try {
-            return URLEncoder.encode(text, CharEncoding.UTF_8);
+            return URLEncoder.encode(text, StandardCharsets.UTF_8.name());
         } catch (final UnsupportedEncodingException e) {
             Log.e("Network.encode", e);
         }

@@ -1,7 +1,5 @@
 package cgeo.geocaching;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.utils.Log;
 import cgeo.geocaching.utils.TextUtils;
 
@@ -9,7 +7,8 @@ import android.os.SystemClock;
 import android.test.AndroidTestCase;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.text.StringEscapeUtils;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class HtmlPerformanceTest extends AndroidTestCase {
     private String input;
@@ -35,21 +34,14 @@ public class HtmlPerformanceTest extends AndroidTestCase {
 
     public void testUnescapePerformance() {
         final int runs = 100;
-        measure("unescape Apache", new Runnable() {
-            @Override
-            public void run() {
-                for (int i = 0; i < runs; i++) {
-                    unescapeApache();
-                }
+        measure("unescape Apache", () -> {
+            for (int i = 0; i < runs; i++) {
+                unescapeApache();
             }
         });
-        measure("unescape Android", new Runnable() {
-
-            @Override
-            public void run() {
-                for (int i = 0; i < runs; i++) {
-                    unescapeAndroid();
-                }
+        measure("unescape Android", () -> {
+            for (int i = 0; i < runs; i++) {
+                unescapeAndroid();
             }
         });
     }

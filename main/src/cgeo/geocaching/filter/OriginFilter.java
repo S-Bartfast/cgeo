@@ -7,11 +7,11 @@ import cgeo.geocaching.utils.TextUtils;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 public class OriginFilter extends AbstractFilter {
@@ -57,13 +57,7 @@ public class OriginFilter extends AbstractFilter {
             }
 
             // sort connectors by name
-            Collections.sort(filters, new Comparator<IFilter>() {
-
-                @Override
-                public int compare(final IFilter lhs, final IFilter rhs) {
-                    return TextUtils.COLLATOR.compare(lhs.getName(), rhs.getName());
-                }
-            });
+            Collections.sort(filters, (lhs, rhs) -> TextUtils.COLLATOR.compare(lhs.getName(), rhs.getName()));
 
             return filters;
         }

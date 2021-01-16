@@ -1,177 +1,140 @@
+// first of all the buildscript block, then the plugins block
+buildscript {
+    repositories {
+        jcenter()
+        google()
+    }
+    dependencies {
+        // these dependencies are used by gradle plugins, not by our projects
+
+        // Android gradle plugin
+        classpath 'com.android.tools.build:gradle:4.1.1'
+
+        // un-mocking of portable Android classes
+        classpath 'de.mobilej.unmock:UnMockPlugin:0.7.6'
+
+        // monitor our application method limit
+        //noinspection GradleDependency - see https://github.com/cgeo/cgeo/issues/9208
+        classpath 'com.getkeepsafe.dexcount:dexcount-gradle-plugin:1.0.3'
+
+        // ribbonizer for easier distinction of non-release builds
+        classpath 'com.github.gfx.ribbonizer:ribbonizer-plugin:2.1.0'
+    }
+}
+
+plugins {
+    // IDEA tasks for the project, see https://docs.gradle.org/current/userguide/idea_plugin.html
+    id 'idea'
+
+    // check for updates of gradle plugin dependencies
+    id 'com.github.ben-manes.versions' version '0.36.0'
+
+    // use SpotBugs instead of FindBugs, see https://plugins.gradle.org/plugin/com.github.spotbugs
+    id 'com.github.spotbugs' version '4.6.0'
+}
+
 /*
  * Just run this script using "gradlew", and it will show you typical examples of how to use it.
  */
 
 defaultTasks 'cgeoHelp'
 
-task cgeoHelp {
-	doLast {
-		println ''
-		println 'These are some of the available commands for building cgeo.'
-		println ''
-		println 'cleaning all generated artifacts:'
-		println '    gradlew clean'
-		println ''
-		println 'build:'
-		println '    gradlew assembleDebug'
-		println ''
-		println 'install on connected device/emulator:'
-		println '    gradlew installBasicDebug'
-		println ''
-		println 'run app on connected device/emulator:'
-		println '    gradlew runBasicDebug'
-		println ''
-		println 'instrumentation tests on connected device/emulator:'
-		println '    gradlew connectedBasicDebugAndroidTest'
-		println ''
-		println 'pure unit tests WITHOUT device'
-		println '    gradlew testBasicDebugUnitTest'
-		println ''
-		println 'all unit tests (pure and instrumentation)'
-		println '    gradlew testDebug'
-		println ''
-		println 'check project dependencies for updates:'
-		println '    gradlew dependencies main:dependencies'
-		println ''
-		println 'check gradle dependencies for updates:'
-		println '    gradlew dependencyUpdates'
-		println ''
-		println 'Use "gradlew tasks" for more available tasks.'
-		println ''
-		println ''
-		println 'Available build types are: debug, nightly (requires an env var named NB), ' +
-				'rc (requires an env var named RC), release.'
-	}
-}
-
-configure(cgeoHelp) {
+tasks.register('cgeoHelp') {
     group = 'cgeo'
     description = 'Displays help for building cgeo.'
-}
-
-/*
- * Build scan plugin shall be applied first
- */
-apply plugin: 'com.gradle.build-scan'
-/*
- * update check for all components in this gradle script
- */
-apply plugin: 'com.github.ben-manes.versions'
-apply plugin: 'idea'
-
-buildscript {
-    repositories {
-        jcenter()
-		// gradle build-scan for profiling our build script
-		maven {
-			url 'https://plugins.gradle.org/m2'
-		}
+    doLast {
+        println ''
+        println 'These are some of the available commands for building cgeo.'
+        println ''
+        println 'cleaning all generated artifacts:'
+        println '    gradlew clean'
+        println ''
+        println 'build:'
+        println '    gradlew assembleDebug'
+        println ''
+        println 'install on connected device/emulator:'
+        println '    gradlew installBasicDebug'
+        println ''
+        println 'run app on connected device/emulator:'
+        println '    gradlew runBasicDebug'
+        println ''
+        println 'instrumentation tests on connected device/emulator:'
+        println '    gradlew connectedBasicDebugAndroidTest'
+        println ''
+        println 'pure unit tests WITHOUT device'
+        println '    gradlew testBasicDebugUnitTest'
+        println ''
+        println 'all unit tests (pure and instrumentation)'
+        println '    gradlew testDebug'
+        println ''
+        println 'check project dependencies for updates:'
+        println '    gradlew dependencies main:dependencies'
+        println ''
+        println 'check gradle dependencies for updates:'
+        println '    gradlew dependencyUpdates'
+        println ''
+        println 'Use "gradlew tasks" for more available tasks.'
+        println ''
+        println ''
+        println 'Available build types are: debug, nightly (requires an env var named NB), ' +
+                'rc (requires an env var named RC), release.'
     }
-    dependencies {
-		// these dependencies are used by gradle plugins, not by our projects
-
-		// check for updates of gradle plugin dependencies
-		classpath 'com.github.ben-manes:gradle-versions-plugin:0.15.0'
-
-		// Android gradle plugin
-        classpath 'com.android.tools.build:gradle:2.3.3'
-
-		// un-mocking of portable Android classes
-		classpath 'de.mobilej.unmock:UnMockPlugin:0.6.3'
-
-		// Google Services (App Invite) has its own Gradle plugin
-		classpath 'com.google.gms:google-services:2.1.0'
-
-		// monitor our application method limit
-		classpath 'com.getkeepsafe.dexcount:dexcount-gradle-plugin:0.7.1'
-
-		// ribbonizer for easier distinction of non-release builds
-		classpath 'com.github.gfx.ribbonizer:plugin:1.0.0'
-
-		// gradle build script profiling
-		classpath 'com.gradle:build-scan-plugin:1.8'
-	}
 }
 
 // filter out non release version updates and other updates we cannot use
 allprojects {
-	configurations {
-		all {
-			resolutionStrategy {
-				componentSelection {
-					all { ComponentSelection selection ->
-						boolean rejected = ['alpha', 'beta', 'rc', 'cr', 'm', 'pr'].any { qualifier ->
-							selection.candidate.version.contains(qualifier)
-						}
-						// allow beta version of androidsvg
-						if (selection.candidate.group == 'com.caverock') {
-							rejected = false
-						}
-						// google auto service only available as rc2 right now
-						if (selection.candidate.group == 'com.google.auto.service') {
-							rejected = false
-						}
-						if (rejected) {
-							selection.reject('Release candidate')
-						}
+    configurations {
+        all {
+            resolutionStrategy {
+                componentSelection {
+                    all { ComponentSelection selection ->
+                        if (['alpha', 'beta', 'rc', 'cr', 'm', 'pr'].any { qualifier -> selection.candidate.version.contains(qualifier)}) {
+                            selection.reject('Release candidate')
+                        }
 
-						// https://github.com/joel-costigliola/assertj-core/issues/345
-						if (selection.candidate.group == 'org.assertj' && selection.candidate.module == 'assertj-core' && selection.candidate.version.substring(0,1).toInteger() > 2) {
-							selection.reject("assertj 3.x or higher require Java 7 SE classes not available in Android")
-						}
-						// findbugs team has some release trouble
-						if (selection.candidate.group == 'com.google.code.findbugs' && selection.candidate.module == 'annotations' && selection.candidate.version == '3.0.1') {
-							selection.reject("3.0.1 is not an upgrade of 3.0.1u2")
-						}
-						// Apache Commons Lang 3.6 requires Java7, https://github.com/apache/commons-lang/commit/9b481a97010a19e375cf423ffe25dda1b40e0e47
-						if (selection.candidate.group == 'org.apache.commons' && selection.candidate.module == 'commons-lang3' && selection.candidate.version.substring(0,1).toInteger()*10+selection.candidate.version.substring(2,3).toInteger() > 35) {
-							selection.reject("Apache Commons Lang3 3.6 or higher requires Java 7.")
-						}
+                        // https://github.com/joel-costigliola/assertj-core/issues/345
+                        if (selection.candidate.group == 'org.assertj' && selection.candidate.module == 'assertj-core' && selection.candidate.version.substring(0,1).toInteger() > 2) {
+                            selection.reject("assertj 3.x or higher requires Java 7 SE classes not available in Android")
+                        }
 
-					}
-				}
-			}
-		}
-	}
+                        // Apache Commons IO 2.6 fails in FileUtils.deleteDirectory()
+                        // (uses java.nio.file.Path - which is first contained in Android API26)
+                        if (selection.candidate.group == 'commons-io' && selection.candidate.module == 'commons-io' && selection.candidate.version.substring(0,1).toInteger()*10+selection.candidate.version.substring(2,3).toInteger() > 25) {
+                            selection.reject("Apache Commons IO 2.6 calls methods not available in the Android runtime untli API26.")
+                        }
+                    }
+                }
+                // new versions of checkstyle use guava 27, which has troublesome dependencies: https://groups.google.com/forum/#!topic/guava-announce/Km82fZG68Sw
+                force 'com.google.guava:guava:26.0-jre'
 
-	repositories {
-		mavenCentral()
-		jcenter()
-		// hosts e.g. viewpagerindicator
-		maven {
-			url "https://jitpack.io"
-		}
-		// viewpager fork
-		maven {
-			url 'https://dl.bintray.com/alexeydanilov/maven'
-		}
-		// Android Support libraries are now in an online Maven repository
-		google()
-	}
+                // force this version because of bug in gradle 4.1.0 (referencing 4.1.0-alpha01-6193524)
+                // TODO check after gradle update
+                force 'com.android.tools.build:aapt2-proto:4.1.0-6503028'
+            }
+        }
+    }
 }
-
-
-buildScan {
-	licenseAgreementUrl = 'https://gradle.com/terms-of-service'
-	licenseAgree = 'yes'
-}
-
 
 /*
  * common configuration for the Java projects
  */
-
-ext.buildToolsVersion = "25.0.2" // android-gradle 2.3 requires at least 25.0
-ext.minSdkVersion = 14
-
 subprojects {
     repositories {
-		mavenCentral()
-		jcenter()
-		// hosts e.g. viewpagerindicator
-		maven {
-			url "https://jitpack.io"
-		}
+        // = mavenCentral()
+        maven {
+            url 'https://repo1.maven.org/maven2'
+            // for undobar
+            metadataSources {
+                artifact()
+            }
+        }
+        jcenter()
+        // viewpager fork
+        maven {
+            url 'https://dl.bintray.com/alexeydanilov/maven'
+        }
+        // Android Support libraries are now in an online Maven repository
+        google()
     }
 
     // disable warning of annotation processor about annotation types with no registered processor (like @NonNull)
@@ -188,6 +151,16 @@ subprojects {
 /*
  * Make sure that we use the source distribution when updating the wrapper from the command line.
  */
-task wrapper(type: Wrapper) {
-	distributionType = "all"
+tasks.named('wrapper') {
+    distributionType = Wrapper.DistributionType.ALL
+}
+
+/*
+ * Configuration for dependencyUpdates, see https://github.com/ben-manes/gradle-versions-plugin
+ */
+tasks.named('dependencyUpdates') {
+    checkForGradleUpdate = true
+    revision = "release"
+    gradleReleaseChannel = "current"
+    outputFormatter = "plain, html"
 }

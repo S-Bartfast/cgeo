@@ -5,19 +5,26 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 23
-    buildToolsVersion project.buildToolsVersion
+    compileSdkVersion 29
+
+    // signing is handled via private.properties
+    signingConfigs {
+        release
+    }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_7
-        targetCompatibility JavaVersion.VERSION_1_7
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     defaultConfig {
-        // TODO fill this section and remove the values from AndroidManifest only after the full switch to gradle
-        // As these values override the manifest, we might otherwise use different values in gradle and non-gradle builds.
-        minSdkVersion project.minSdkVersion
-        targetSdkVersion 22
+        minSdkVersion 21
+        //noinspection OldTargetApi
+        targetSdkVersion 29
+
+        // include only those language resources from libraries which we actively maintain ourselves in the translation project
+        // not yet enough translations (~50%): "is","iw" (="he"),"zh"
+        resConfigs "en","ar","ca","ceb","cs","da","de","el","es","fi","fil","fr","hu","in","it","ja","ko","lt","lv","nb","nl","pl","pt","ro","ru","sk","sl","sv","tl","tr","zh-rTW"
     }
 
     sourceSets {
@@ -30,20 +37,52 @@ android {
     }
 
     lintOptions {
-    	// generally we accept lint errors when building 
+        // generally we accept lint errors when building
         abortOnError false
-        
-    	// abort release builds in case of FATAL errors
+
+        // abort release builds in case of FATAL errors
         checkReleaseBuilds true
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
     }
 }
 
 
 dependencies {
     // Apache Commons
-    compile 'commons-io:commons-io:2.5'
-    compile 'org.apache.commons:commons-lang3:3.5'
+    implementation 'org.apache.commons:commons-lang3:3.11'
+    // commons-io 2.6 uses java.nio.file.Path - which is first contained in Android API26
+    // could be replaced by Storage Access Framework
+    //noinspection GradleDependency
+    implementation 'commons-io:commons-io:2.5'
+
+    // Support Library AppCompat
+    implementation 'androidx.appcompat:appcompat:1.2.0'
 
     // Android annotations
-    compile 'com.android.support:support-annotations:24.2.1'
+    implementation 'androidx.annotation:annotation:1.1.0'
+}
+
+/*
+ * signing of release APK, use a properties file like in templates/private.properties
+ */
+
+// dynamically load the signing values from private.properties
+File privatePropertiesFile = rootProject.file('private.properties')
+if (privatePropertiesFile.exists()) {
+    Properties properties = new Properties()
+    properties.load(new FileInputStream(privatePropertiesFile))
+    android.signingConfigs {
+        release {
+            storeFile file(properties.getProperty('key.store'))
+            storePassword properties.getProperty('key.store.password')
+            keyAlias properties.getProperty('key.alias')
+            keyPassword properties.getProperty('key.alias.password')
+        }
+    }
+    android.buildTypes.release.signingConfig android.signingConfigs.release
 }

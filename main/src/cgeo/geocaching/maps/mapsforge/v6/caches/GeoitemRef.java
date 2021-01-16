@@ -3,19 +3,18 @@ package cgeo.geocaching.maps.mapsforge.v6.caches;
 import cgeo.geocaching.enumerations.CoordinatesType;
 import cgeo.geocaching.utils.TextUtils;
 
-import org.apache.commons.lang3.StringUtils;
+import android.os.Parcel;
+import android.os.Parcelable;
+
+import androidx.annotation.NonNull;
 
 import java.util.Comparator;
 
-public class GeoitemRef {
+import org.apache.commons.lang3.StringUtils;
 
-    public static final Comparator<? super GeoitemRef> NAME_COMPARATOR = new Comparator<GeoitemRef>() {
+public class GeoitemRef implements Parcelable {
 
-        @Override
-        public int compare(final GeoitemRef left, final GeoitemRef right) {
-            return TextUtils.COLLATOR.compare(left.getName(), right.getName());
-        }
-    };
+    public static final Comparator<? super GeoitemRef> NAME_COMPARATOR = (Comparator<GeoitemRef>) (left, right) -> TextUtils.COLLATOR.compare(left.getName(), right.getName());
 
     private final String itemCode;
     private final CoordinatesType type;
@@ -50,6 +49,7 @@ public class GeoitemRef {
     }
 
     @Override
+    @NonNull
     public String toString() {
         if (StringUtils.isEmpty(name)) {
             return itemCode;
@@ -81,4 +81,42 @@ public class GeoitemRef {
     public int getMarkerId() {
         return markerId;
     }
+
+
+    // Parcelable functions
+
+    public static final Parcelable.Creator<GeoitemRef> CREATOR =
+            new Parcelable.Creator<GeoitemRef>() {
+                @Override
+                public GeoitemRef createFromParcel(final Parcel in) {
+                    final String itemCode = in.readString();
+                    final CoordinatesType type = CoordinatesType.values()[in.readInt()];
+                    final String geocode = in.readString();
+                    final int id = in.readInt();
+                    final String name = in.readString();
+                    final int markerId = in.readInt();
+                    return new GeoitemRef(itemCode, type, geocode, id, name, markerId);
+                }
+
+                @Override
+                public GeoitemRef[] newArray(final int size) {
+                    return new GeoitemRef[size];
+                }
+            };
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(final Parcel parcel, final int flags) {
+        parcel.writeString(itemCode);
+        parcel.writeInt(type.ordinal());
+        parcel.writeString(geocode);
+        parcel.writeInt(id);
+        parcel.writeString(name);
+        parcel.writeInt(markerId);
+    }
+
 }

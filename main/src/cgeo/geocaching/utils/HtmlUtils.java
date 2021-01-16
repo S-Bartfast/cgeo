@@ -1,17 +1,17 @@
 package cgeo.geocaching.utils;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
-import android.support.annotation.NonNull;
-
-import android.text.Html;
 import android.text.Spanned;
 import android.text.style.ImageSpan;
 
+import androidx.annotation.NonNull;
+import androidx.core.text.HtmlCompat;
+
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 public final class HtmlUtils {
 
@@ -45,13 +45,7 @@ public final class HtmlUtils {
             }
 
             // sort reversed and delete image spans
-            Collections.sort(removals, new Comparator<Pair<Integer, Integer>>() {
-
-                @Override
-                public int compare(final Pair<Integer, Integer> lhs, final Pair<Integer, Integer> rhs) {
-                    return rhs.getRight().compareTo(lhs.getRight());
-                }
-            });
+            Collections.sort(removals, (lhs, rhs) -> rhs.getRight().compareTo(lhs.getRight()));
             result = text.toString();
             for (final Pair<Integer, Integer> removal : removals) {
                 result = result.substring(0, removal.getLeft()) + result.substring(removal.getRight());
@@ -59,7 +53,7 @@ public final class HtmlUtils {
         }
 
         // now that images are gone, do a normal html to text conversion
-        return Html.fromHtml(result).toString().trim();
+        return HtmlCompat.fromHtml(result, HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim();
     }
 
     /**

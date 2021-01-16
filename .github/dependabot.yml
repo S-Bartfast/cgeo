@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: daily
+    # no limit :)
+    open-pull-requests-limit: 20
+    ignore:
+      # Ignore some updates to the apache 'commons-io' package
+      # commons-io 2.6 uses java.nio.file.Path - which is first contained in Android API26
+      - dependency-name: "commons-io:commons-io"

@@ -3,8 +3,10 @@ package cgeo.geocaching;
 import cgeo.geocaching.activity.AbstractActionBarActivity;
 import cgeo.geocaching.address.AndroidGeocoder;
 import cgeo.geocaching.connector.ConnectorFactory;
+import cgeo.geocaching.connector.IConnector;
 import cgeo.geocaching.connector.capability.ILogin;
 import cgeo.geocaching.connector.gc.PocketQueryListActivity;
+import cgeo.geocaching.connector.internal.InternalConnector;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.enumerations.StatusCode;
 import cgeo.geocaching.helper.UsefulAppsActivity;
@@ -14,64 +16,72 @@ import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Units;
 import cgeo.geocaching.maps.DefaultMap;
 import cgeo.geocaching.network.Network;
-import cgeo.geocaching.playservices.AppInvite;
+import cgeo.geocaching.permission.PermissionGrantedCallback;
+import cgeo.geocaching.permission.PermissionHandler;
+import cgeo.geocaching.permission.PermissionRequestContext;
 import cgeo.geocaching.sensors.GeoData;
 import cgeo.geocaching.sensors.GeoDirHandler;
-import cgeo.geocaching.sensors.GpsStatusProvider;
-import cgeo.geocaching.sensors.GpsStatusProvider.Status;
+import cgeo.geocaching.sensors.GnssStatusProvider;
+import cgeo.geocaching.sensors.GnssStatusProvider.Status;
 import cgeo.geocaching.sensors.Sensors;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.settings.SettingsActivity;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.storage.LocalStorage;
+import cgeo.geocaching.storage.extension.FoundNumCounter;
+import cgeo.geocaching.storage.extension.OneTimeDialogs;
 import cgeo.geocaching.ui.WeakReferenceHandler;
 import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.AndroidRxUtils;
-import cgeo.geocaching.utils.DatabaseBackupUtils;
+import cgeo.geocaching.utils.BackupUtils;
+import cgeo.geocaching.utils.DebugUtils;
 import cgeo.geocaching.utils.Formatter;
 import cgeo.geocaching.utils.Log;
 import cgeo.geocaching.utils.TextUtils;
 import cgeo.geocaching.utils.Version;
-import cgeo.geocaching.utils.functions.Action1;
 
+import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.SearchManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.location.Address;
 import android.net.ConnectivityManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.support.v4.view.MenuItemCompat;
-import android.support.v7.widget.SearchView;
-import android.support.v7.widget.SearchView.OnQueryTextListener;
-import android.support.v7.widget.SearchView.OnSuggestionListener;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.widget.SearchView;
+import androidx.appcompat.widget.SearchView.OnQueryTextListener;
+import androidx.appcompat.widget.SearchView.OnSuggestionListener;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 import com.jakewharton.processphoenix.ProcessPhoenix;
-import io.reactivex.Single;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Function;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.functions.Consumer;
 import org.apache.commons.lang3.StringUtils;
 
 public class MainActivity extends AbstractActionBarActivity {
@@ -88,6 +98,7 @@ public class MainActivity extends AbstractActionBarActivity {
     @BindView(R.id.nav_location) protected TextView navLocation;
     @BindView(R.id.offline_count) protected TextView countBubble;
     @BindView(R.id.info_area) protected ListView infoArea;
+    @BindView(R.id.info_notloggedin) protected View notLoggedIn;
 
     /**
      * view of the action bar search
@@ -96,11 +107,16 @@ public class MainActivity extends AbstractActionBarActivity {
     private MenuItem searchItem;
     private Geopoint addCoords = null;
     private boolean initialized = false;
+    private boolean restoreMessageShown = false;
     private ConnectivityChangeReceiver connectivityChangeReceiver;
 
     private final UpdateLocation locationUpdater = new UpdateLocation();
     private final Handler updateUserInfoHandler = new UpdateUserInfoHandler(this);
     private final Handler firstLoginHandler = new FirstLoginHandler(this);
+    /**
+     * initialization with an empty subscription
+     */
+    private final CompositeDisposable resumeDisposables = new CompositeDisposable();
 
     private static final class UpdateUserInfoHandler extends WeakReferenceHandler<MainActivity> {
 
@@ -118,7 +134,7 @@ public class MainActivity extends AbstractActionBarActivity {
                 // Update UI
                 activity.infoArea.setAdapter(new ArrayAdapter<ILogin>(activity, R.layout.main_activity_connectorstatus, loginConns) {
                     @Override
-                    public View getView(final int position, final View convertView, final android.view.ViewGroup parent) {
+                    public View getView(final int position, final View convertView, @NonNull final android.view.ViewGroup parent) {
                         TextView rowView = (TextView) convertView;
                         if (rowView == null) {
                             rowView = (TextView) activity.getLayoutInflater().inflate(R.layout.main_activity_connectorstatus, parent, false);
@@ -131,24 +147,44 @@ public class MainActivity extends AbstractActionBarActivity {
                     }
 
                     private void fillView(final TextView connectorInfo, final ILogin conn) {
+                        boolean offlineFoundsAvailable = false;
+
                         final StringBuilder userInfo = new StringBuilder(conn.getNameAbbreviated()).append(Formatter.SEPARATOR);
                         if (conn.isLoggedIn()) {
-                            userInfo.append(conn.getUserName());
+                            userInfo.append(conn.getUserName()).append(" ");
                             if (conn.getCachesFound() >= 0) {
-                                userInfo.append(" (").append(conn.getCachesFound()).append(')');
+                                FoundNumCounter.updateFoundNum(conn.getName(), conn.getCachesFound());
                             }
+                            activity.checkLoggedIn();
+                        }
+
+                        final FoundNumCounter f = FoundNumCounter.load(conn.getName());
+                        if (f != null) {
+
+                            userInfo.append('(').append(f.getCounter(false));
+
+                            if (Settings.isDisplayOfflineLogsHomescreen()) {
+                                final int offlinefounds = DataStore.getFoundsOffline(conn.getName());
+                                if (offlinefounds > 0) {
+                                    userInfo.append(" + ").append(offlinefounds);
+
+                                    offlineFoundsAvailable = true;
+                                }
+                            }
+                            userInfo.append(')').append(Formatter.SEPARATOR);
+
+                        } else if (conn.isLoggedIn()) {
                             userInfo.append(Formatter.SEPARATOR);
                         }
+
                         userInfo.append(conn.getLoginStatusString());
 
                         connectorInfo.setText(userInfo);
-                        connectorInfo.setOnClickListener(new OnClickListener() {
+                        connectorInfo.setOnClickListener(v -> SettingsActivity.openForScreen(R.string.preference_screen_services, activity));
 
-                            @Override
-                            public void onClick(final View v) {
-                                SettingsActivity.openForScreen(R.string.preference_screen_services, activity);
-                            }
-                        });
+                        if (offlineFoundsAvailable) {
+                            Dialogs.basicOneTimeMessage((Activity) getContext(), OneTimeDialogs.DialogType.EXPLAIN_OFFLINE_FOUND_COUNTER);
+                        }
                     }
                 });
             }
@@ -166,6 +202,21 @@ public class MainActivity extends AbstractActionBarActivity {
                 startBackgroundLogin();
             }
         }
+    }
+
+    /**
+     * check if at least one connector has been logged in successfully
+     * and set visibility of warning message accordingly
+     */
+    public void checkLoggedIn() {
+        final ILogin[] activeConnectors = ConnectorFactory.getActiveLiveConnectors();
+        for (final IConnector conn : activeConnectors) {
+            if (((ILogin) conn).isLoggedIn()) {
+                notLoggedIn.setVisibility(View.INVISIBLE);
+                return;
+            }
+        }
+        notLoggedIn.setVisibility(View.VISIBLE);
     }
 
     private static String formatAddress(final Address address) {
@@ -187,11 +238,12 @@ public class MainActivity extends AbstractActionBarActivity {
         return StringUtils.join(addressParts, ", ");
     }
 
-    private final Consumer<GpsStatusProvider.Status> satellitesHandler = new Consumer<Status>() {
+    private final Consumer<GnssStatusProvider.Status> satellitesHandler = new Consumer<Status>() {
         @Override
-        public void accept(final Status gpsStatus) {
-            if (gpsStatus.gpsEnabled) {
-                navSatellites.setText(res.getString(R.string.loc_sat) + ": " + gpsStatus.satellitesFixed + '/' + gpsStatus.satellitesVisible);
+        @SuppressLint("SetTextI18n")
+        public void accept(final Status gnssStatus) {
+            if (gnssStatus.gnssEnabled) {
+                navSatellites.setText(res.getString(R.string.loc_sat) + ": " + gnssStatus.satellitesFixed + '/' + gnssStatus.satellitesVisible);
             } else {
                 navSatellites.setText(res.getString(R.string.loc_gps_disabled));
             }
@@ -223,13 +275,30 @@ public class MainActivity extends AbstractActionBarActivity {
 
     @Override
     public void onCreate(final Bundle savedInstanceState) {
+        if (Settings.isTransparentBackground()) {
+            setTheme(R.style.cgeo_main_transparent);
+        }
         // don't call the super implementation with the layout argument, as that would set the wrong theme
         super.onCreate(savedInstanceState);
 
+        //check database
+        final String errorMsg = DataStore.initAndCheck(false);
+        if (errorMsg != null) {
+            DebugUtils.askUserToReportProblem(this, "Fatal DB error: " + errorMsg);
+        }
+
         // Disable the up navigation for this activity
-        getSupportActionBar().setDisplayHomeAsUpEnabled(false);
+        final ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setHomeAsUpIndicator(R.drawable.cgeo_actionbar_squircle);
+            actionBar.setDisplayHomeAsUpEnabled(true);
+        }
 
         setContentView(R.layout.main_activity);
+        if (!Settings.isTransparentBackground()) {
+            final View mainscreen = findViewById(R.id.mainscreen);
+            mainscreen.setBackgroundColor(getResources().getColor(Settings.isLightSkin() ? R.color.background_light_notice : R.color.background_dark_notice));
+        }
         ButterKnife.bind(this);
 
         if ((getIntent().getFlags() & Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT) != 0) {
@@ -242,9 +311,29 @@ public class MainActivity extends AbstractActionBarActivity {
 
         Log.i("Starting " + getPackageName() + ' ' + Version.getVersionCode(this) + " a.k.a " + Version.getVersionName(this));
 
+        final Activity mainActivity = this;
+
+        PermissionHandler.requestStoragePermission(this, new PermissionGrantedCallback(PermissionRequestContext.MainActivityStorage) {
+            @Override
+            protected void execute() {
+                PermissionHandler.executeIfLocationPermissionGranted(mainActivity, new PermissionGrantedCallback(PermissionRequestContext.MainActivityOnCreate) {
+                    // TODO: go directly into execute if the device api level is below 26
+                    @Override
+                    public void execute() {
+                        final Sensors sensors = Sensors.getInstance();
+                        sensors.setupGeoDataObservables(Settings.useGooglePlayServices(), Settings.useLowPowerMode());
+                        sensors.setupDirectionObservable();
+
+                        // Attempt to acquire an initial location before any real activity happens.
+                        sensors.geoDataObservable(true).subscribeOn(AndroidRxUtils.looperCallbacksScheduler).take(1).subscribe();
+                    }
+                });
+            }
+        });
+
         init();
 
-        checkShowChangelog();
+        checkChangedInstall();
 
         LocalStorage.initGeocacheDataDir();
         if (LocalStorage.isRunningLowOnDiskSpace()) {
@@ -252,22 +341,46 @@ public class MainActivity extends AbstractActionBarActivity {
         }
 
         confirmDebug();
+
+        // infobox "not logged in" with link to service config; display delayed by 10 seconds
+        final Handler handler = new Handler();
+        handler.postDelayed(this::checkLoggedIn, 10000);
+        notLoggedIn.setOnClickListener(v -> Dialogs.confirmYesNo(this, R.string.warn_notloggedin_title, R.string.warn_notloggedin_long, (dialog, which) -> SettingsActivity.openForScreen(R.string.preference_screen_services, this)));
+
+        // reactivate dialogs which are set to show later
+        OneTimeDialogs.nextStatus();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(final int requestCode, @NonNull final String[] permissions, @NonNull final int[] grantResults) {
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            PermissionHandler.executeCallbacksFor(permissions);
+        } else {
+            final Activity activity = this;
+            final PermissionRequestContext perm = PermissionRequestContext.fromRequestCode(requestCode);
+            Dialogs.newBuilder(this)
+                    .setMessage(perm.getAskAgainResource())
+                    .setCancelable(false)
+                    .setPositiveButton(R.string.ask_again, (dialog, which) -> PermissionHandler.askAgainFor(permissions, activity, perm))
+                    .setNegativeButton(R.string.close_app, (dialog, which) -> {
+                        activity.finish();
+                        System.exit(0);
+                    })
+                    .setIcon(R.drawable.ic_menu_preferences)
+                    .create()
+                    .show();
+        }
     }
 
     @SuppressWarnings("unused") // in Eclipse, BuildConfig.DEBUG is always true
     private void confirmDebug() {
         if (Settings.isDebug() && !BuildConfig.DEBUG) {
-            Dialogs.confirmYesNo(this, R.string.init_confirm_debug, R.string.list_confirm_debug_message, new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(final DialogInterface dialog, final int whichButton) {
-                    Settings.setDebug(false);
-                }
-            });
+            Dialogs.confirmYesNo(this, R.string.init_confirm_debug, R.string.list_confirm_debug_message, (dialog, whichButton) -> Settings.setDebug(false));
         }
     }
 
     @Override
-    public void onConfigurationChanged(final Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull final Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
         init();
@@ -275,12 +388,26 @@ public class MainActivity extends AbstractActionBarActivity {
 
     @Override
     public void onResume() {
-        super.onResume(locationUpdater.start(GeoDirHandler.UPDATE_GEODATA | GeoDirHandler.LOW_POWER),
-                Sensors.getInstance().gpsStatusObservable().observeOn(AndroidSchedulers.mainThread()).subscribe(satellitesHandler));
+        super.onResume();
+        final Activity mainActivity = this;
+        PermissionHandler.requestStoragePermission(this, new PermissionGrantedCallback(PermissionRequestContext.MainActivityStorage) {
+            @Override
+            protected void execute() {
+                PermissionHandler.executeIfLocationPermissionGranted(mainActivity, new PermissionGrantedCallback(PermissionRequestContext.MainActivityOnResume) {
+
+                    @Override
+                    public void execute() {
+                        resumeDisposables.add(locationUpdater.start(GeoDirHandler.UPDATE_GEODATA | GeoDirHandler.LOW_POWER));
+                        resumeDisposables.add(Sensors.getInstance().gpsStatusObservable().observeOn(AndroidSchedulers.mainThread()).subscribe(satellitesHandler));
+
+                    }
+                });
+            }
+        });
+
         updateUserInfoHandler.sendEmptyMessage(-1);
         startBackgroundLogin();
         init();
-
         connectivityChangeReceiver = new ConnectivityChangeReceiver();
         registerReceiver(connectivityChangeReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
     }
@@ -290,16 +417,13 @@ public class MainActivity extends AbstractActionBarActivity {
 
         for (final ILogin conn : ConnectorFactory.getActiveLiveConnectors()) {
             if (mustLogin || !conn.isLoggedIn()) {
-                AndroidRxUtils.networkScheduler.scheduleDirect(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (mustLogin) {
-                            // Properly log out from geocaching.com
-                            conn.logout();
-                        }
-                        conn.login(firstLoginHandler, MainActivity.this);
-                        updateUserInfoHandler.sendEmptyMessage(-1);
+                AndroidRxUtils.networkScheduler.scheduleDirect(() -> {
+                    if (mustLogin) {
+                        // Properly log out from geocaching.com
+                        conn.logout();
                     }
+                    conn.login(firstLoginHandler, MainActivity.this);
+                    updateUserInfoHandler.sendEmptyMessage(-1);
                 });
             }
         }
@@ -308,7 +432,6 @@ public class MainActivity extends AbstractActionBarActivity {
     @Override
     public void onDestroy() {
         initialized = false;
-        ConnectorFactory.showLoginToast = true;
 
         super.onDestroy();
     }
@@ -322,6 +445,7 @@ public class MainActivity extends AbstractActionBarActivity {
     @Override
     public void onPause() {
         initialized = false;
+        resumeDisposables.clear();
         unregisterReceiver(connectivityChangeReceiver);
         super.onPause();
     }
@@ -331,9 +455,30 @@ public class MainActivity extends AbstractActionBarActivity {
         getMenuInflater().inflate(R.menu.main_activity_options, menu);
         final SearchManager searchManager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
         searchItem = menu.findItem(R.id.menu_gosearch);
-        searchView = (SearchView) MenuItemCompat.getActionView(searchItem);
+        searchView = (SearchView) searchItem.getActionView();
         searchView.setSearchableInfo(searchManager.getSearchableInfo(getComponentName()));
         hideKeyboardOnSearchClick(searchItem);
+
+        // hide other action icons when search is active
+        searchItem.setOnActionExpandListener(new MenuItem.OnActionExpandListener() {
+
+            @Override
+            public boolean onMenuItemActionExpand(final MenuItem item) {
+                for (int i = 0; i < menu.size(); i++) {
+                    if (menu.getItem(i).getItemId() != R.id.menu_gosearch) {
+                        menu.getItem(i).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+                    }
+                }
+                return true;
+            }
+
+            @Override
+            public boolean onMenuItemActionCollapse(final MenuItem item) {
+                invalidateOptionsMenu();
+                return true;
+            }
+        });
+
         return true;
     }
 
@@ -347,7 +492,7 @@ public class MainActivity extends AbstractActionBarActivity {
 
             @Override
             public boolean onSuggestionClick(final int arg0) {
-                MenuItemCompat.collapseActionView(searchItem);
+                searchItem.collapseActionView();
                 searchView.setIconified(true);
                 // return false to invoke standard behavior of launching the intent for the search result
                 return false;
@@ -358,7 +503,7 @@ public class MainActivity extends AbstractActionBarActivity {
         searchView.setOnQueryTextListener(new OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(final String s) {
-                MenuItemCompat.collapseActionView(searchItem);
+                searchItem.collapseActionView();
                 searchView.setIconified(true);
                 return false;
             }
@@ -373,45 +518,40 @@ public class MainActivity extends AbstractActionBarActivity {
     @Override
     public boolean onPrepareOptionsMenu(final Menu menu) {
         super.onPrepareOptionsMenu(menu);
+        menu.findItem(R.id.menu_wizard).setVisible(!InstallWizardActivity.isConfigurationOk(this));
         menu.findItem(R.id.menu_pocket_queries).setVisible(Settings.isGCConnectorActive() && Settings.isGCPremiumMember());
-        menu.findItem(R.id.menu_app_invite).setVisible(AppInvite.isAvailable());
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(final MenuItem item) {
         final int id = item.getItemId();
-        switch (id) {
-            case android.R.id.home:
-                // this activity must handle the home navigation different than all others
-                showAbout(null);
-                return true;
-            case R.id.menu_about:
-                showAbout(null);
-                return true;
-            case R.id.menu_helpers:
-                startActivity(new Intent(this, UsefulAppsActivity.class));
-                return true;
-            case R.id.menu_settings:
-                startActivityForResult(new Intent(this, SettingsActivity.class), Intents.SETTINGS_ACTIVITY_REQUEST_CODE);
-                return true;
-            case R.id.menu_history:
-                startActivity(CacheListActivity.getHistoryIntent(this));
-                return true;
-            case R.id.menu_scan:
-                startScannerApplication();
-                return true;
-            case R.id.menu_pocket_queries:
-                if (!Settings.isGCPremiumMember()) {
-                    return true;
-                }
+        if (id == android.R.id.home || id == R.id.menu_about) {
+            showAbout(null);
+        } else if (id == R.id.menu_report_problem) {
+            DebugUtils.askUserToReportProblem(this, null);
+        } else if (id == R.id.menu_helpers) {
+            startActivity(new Intent(this, UsefulAppsActivity.class));
+        } else if (id == R.id.menu_wizard) {
+            final Intent wizard = new Intent(this, InstallWizardActivity.class);
+            wizard.putExtra(InstallWizardActivity.BUNDLE_RETURNING, true);
+            startActivity(wizard);
+        } else if (id == R.id.menu_settings) {
+            startActivityForResult(new Intent(this, SettingsActivity.class), Intents.SETTINGS_ACTIVITY_REQUEST_CODE);
+        } else if (id == R.id.menu_backup) {
+            SettingsActivity.openForScreen(R.string.preference_screen_backup, this);
+        } else if (id == R.id.menu_history) {
+            startActivity(CacheListActivity.getHistoryIntent(this));
+        } else if (id == R.id.menu_scan) {
+            startScannerApplication();
+        } else if (id == R.id.menu_pocket_queries) {
+            if (Settings.isGCPremiumMember()) {
                 startActivity(new Intent(this, PocketQueryListActivity.class));
-                return true;
-            case R.id.menu_app_invite:
-                AppInvite.send(this, getString(R.string.invitation_message));
-                return true;
+            }
+        } else {
+            return super.onOptionsItemSelected(item);
         }
-        return super.onOptionsItemSelected(item);
+        return true;
     }
 
     private void startScannerApplication() {
@@ -426,6 +566,7 @@ public class MainActivity extends AbstractActionBarActivity {
 
     @Override
     public void onActivityResult(final int requestCode, final int resultCode, final Intent intent) {
+        super.onActivityResult(requestCode, resultCode, intent);  // call super to make lint happy
         if (requestCode == Intents.SETTINGS_ACTIVITY_REQUEST_CODE) {
             if (resultCode == SettingsActivity.RESTART_NEEDED) {
                 ProcessPhoenix.triggerRebirth(this);
@@ -463,68 +604,31 @@ public class MainActivity extends AbstractActionBarActivity {
         initialized = true;
 
         findOnMap.setClickable(true);
-        findOnMap.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(final View v) {
-                cgeoFindOnMap(v);
-            }
-        });
+        findOnMap.setOnClickListener(this::cgeoFindOnMap);
 
         findByOffline.setClickable(true);
-        findByOffline.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(final View v) {
-                cgeoFindByOffline(v);
-            }
-        });
-        findByOffline.setOnLongClickListener(new View.OnLongClickListener() {
-
-            @Override
-            public boolean onLongClick(final View v) {
-                new StoredList.UserInterface(MainActivity.this).promptForListSelection(R.string.list_title, new Action1<Integer>() {
-
-                    @Override
-                    public void call(final Integer selectedListId) {
-                        Settings.setLastDisplayedList(selectedListId);
-                        CacheListActivity.startActivityOffline(MainActivity.this);
-                    }
-                }, false, PseudoList.HISTORY_LIST.id);
-                return true;
-            }
+        findByOffline.setOnClickListener(this::cgeoFindByOffline);
+        findByOffline.setOnLongClickListener(v -> {
+            new StoredList.UserInterface(MainActivity.this).promptForListSelection(R.string.list_title, selectedListId -> {
+                Settings.setLastDisplayedList(selectedListId);
+                CacheListActivity.startActivityOffline(MainActivity.this);
+            }, false, PseudoList.HISTORY_LIST.id);
+            return true;
         });
         findByOffline.setLongClickable(true);
 
         advanced.setClickable(true);
-        advanced.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(final View v) {
-                cgeoSearch(v);
-            }
-        });
+        advanced.setOnClickListener(this::cgeoSearch);
 
         any.setClickable(true);
-        any.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(final View v) {
-                cgeoPoint(v);
-            }
-        });
+        any.setOnClickListener(this::cgeoPoint);
 
         filter.setClickable(true);
-        filter.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(final View v) {
-                selectGlobalTypeFilter();
-            }
-        });
-        filter.setOnLongClickListener(new View.OnLongClickListener() {
-
-            @Override
-            public boolean onLongClick(final View v) {
-                Settings.setCacheType(CacheType.ALL);
-                setFilterTitle();
-                return true;
-            }
+        filter.setOnClickListener(v -> selectGlobalTypeFilter());
+        filter.setOnLongClickListener(v -> {
+            Settings.setCacheType(CacheType.ALL);
+            setFilterTitle();
+            return true;
         });
 
         updateCacheCounter();
@@ -535,74 +639,58 @@ public class MainActivity extends AbstractActionBarActivity {
     }
 
     protected void selectGlobalTypeFilter() {
-        Dialogs.selectGlobalTypeFilter(this, new Action1<CacheType>() {
-            @Override
-            public void call(final CacheType cacheType) {
-                setFilterTitle();
-            }
-        });
+        Dialogs.selectGlobalTypeFilter(this, cacheType -> setFilterTitle());
     }
 
     public void updateCacheCounter() {
-        AndroidRxUtils.bindActivity(this, DataStore.getAllCachesCountObservable()).subscribe(new Consumer<Integer>() {
-            @Override
-            public void accept(final Integer countBubbleCnt1) {
-                if (countBubbleCnt1 == 0) {
-                    countBubble.setVisibility(View.GONE);
-                } else {
-                    countBubble.setText(Integer.toString(countBubbleCnt1));
-                    countBubble.bringToFront();
-                    countBubble.setVisibility(View.VISIBLE);
-                }
+        AndroidRxUtils.bindActivity(this, DataStore.getAllCachesCountObservable()).subscribe(countBubbleCnt1 -> {
+            if (countBubbleCnt1 == 0) {
+                countBubble.setVisibility(View.GONE);
+            } else {
+                countBubble.setText(String.format(Locale.getDefault(), "%d", countBubbleCnt1));
+                countBubble.bringToFront();
+                countBubble.setVisibility(View.VISIBLE);
             }
-        }, new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) {
-                Log.e("Unable to add bubble count", throwable);
-            }
-        });
+        }, throwable -> Log.e("Unable to add bubble count", throwable));
     }
 
     private void checkRestore() {
-        if (!DataStore.isNewlyCreatedDatebase() || DatabaseBackupUtils.getRestoreFile() == null) {
-            return;
+        final BackupUtils backupUtils = new BackupUtils(MainActivity.this);
+
+        if (DataStore.isNewlyCreatedDatebase() && !restoreMessageShown) {
+
+            backupUtils.moveBackupIntoNewFolderStructureIfNeeded();
+            if (BackupUtils.hasBackup(BackupUtils.newestBackupFolder())) {
+
+                restoreMessageShown = true;
+                new AlertDialog.Builder(this)
+                        .setTitle(res.getString(R.string.init_backup_restore))
+                        .setMessage(res.getString(R.string.init_restore_confirm))
+                        .setCancelable(false)
+                        .setPositiveButton(getString(android.R.string.yes), (dialog, id) -> {
+                            dialog.dismiss();
+                            DataStore.resetNewlyCreatedDatabase();
+                            backupUtils.restore(BackupUtils.newestBackupFolder());
+                        })
+                        .setNegativeButton(getString(android.R.string.no), (dialog, id) -> {
+                            dialog.cancel();
+                            DataStore.resetNewlyCreatedDatabase();
+                        })
+                        .create()
+                        .show();
+            }
         }
-        new AlertDialog.Builder(this)
-                .setTitle(res.getString(R.string.init_backup_restore))
-                .setMessage(res.getString(R.string.init_restore_confirm))
-                .setCancelable(false)
-                .setPositiveButton(getString(android.R.string.yes), new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(final DialogInterface dialog, final int id) {
-                        dialog.dismiss();
-                        DataStore.resetNewlyCreatedDatabase();
-                        DatabaseBackupUtils.restoreDatabase(MainActivity.this);
-                    }
-                })
-                .setNegativeButton(getString(android.R.string.no), new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(final DialogInterface dialog, final int id) {
-                        dialog.cancel();
-                        DataStore.resetNewlyCreatedDatabase();
-                    }
-                })
-                .create()
-                .show();
     }
 
     private class UpdateLocation extends GeoDirHandler {
 
         @Override
+        @SuppressLint("SetTextI18n")
         public void updateGeoData(final GeoData geo) {
             if (!nearestView.isClickable()) {
                 nearestView.setFocusable(true);
                 nearestView.setClickable(true);
-                nearestView.setOnClickListener(new OnClickListener() {
-                    @Override
-                    public void onClick(final View v) {
-                        cgeoFindNearest(v);
-                    }
-                });
+                nearestView.setOnClickListener(MainActivity.this::cgeoFindNearest);
                 nearestView.setBackgroundResource(R.drawable.main_nearby);
             }
 
@@ -622,20 +710,10 @@ public class MainActivity extends AbstractActionBarActivity {
                 }
                 if (addCoords == null || currentCoords.distanceTo(addCoords) > 0.5) {
                     addCoords = currentCoords;
-                    final Single<String> address = (new AndroidGeocoder(MainActivity.this).getFromLocation(currentCoords)).map(new Function<Address, String>() {
-                        @Override
-                        public String apply(final Address address) {
-                            return formatAddress(address);
-                        }
-                    }).onErrorResumeNext(Single.just(currentCoords.toString()));
+                    final Single<String> address = (new AndroidGeocoder(MainActivity.this).getFromLocation(currentCoords)).map(MainActivity::formatAddress).onErrorResumeWith(Single.just(currentCoords.toString()));
                     AndroidRxUtils.bindActivity(MainActivity.this, address)
                             .subscribeOn(AndroidRxUtils.networkScheduler)
-                            .subscribe(new Consumer<String>() {
-                                @Override
-                                public void accept(final String address) {
-                                    navLocation.setText(address);
-                                }
-                            });
+                            .subscribe(address12 -> navLocation.setText(address12));
                 }
             } else {
                 navLocation.setText(currentCoords.toString());
@@ -685,7 +763,8 @@ public class MainActivity extends AbstractActionBarActivity {
      */
     public void cgeoPoint(final View v) {
         any.setPressed(true);
-        startActivity(new Intent(this, NavigateAnyPointActivity.class));
+        InternalConnector.assertHistoryCacheExists(this);
+        CacheDetailActivity.startActivity(this, InternalConnector.GEOCODE_HISTORY_CACHE, true);
     }
 
     /**
@@ -705,15 +784,19 @@ public class MainActivity extends AbstractActionBarActivity {
         startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
     }
 
-    private void checkShowChangelog() {
+    private void checkChangedInstall() {
         // temporary workaround for #4143
         //TODO: understand and avoid if possible
         try {
             final long lastChecksum = Settings.getLastChangelogChecksum();
             final long checksum = TextUtils.checksum(getString(R.string.changelog_master) + getString(R.string.changelog_release));
             Settings.setLastChangelogChecksum(checksum);
-            // don't show change log after new install...
-            if (lastChecksum > 0 && lastChecksum != checksum) {
+
+            if (lastChecksum == 0) {
+                // initialize oneTimeMessages after fresh install
+                OneTimeDialogs.initializeOnFreshInstall();
+            } else if (lastChecksum != checksum) {
+                // show change log page after update
                 AboutActivity.showChangeLog(this);
             }
         } catch (final Exception ex) {
@@ -734,7 +817,7 @@ public class MainActivity extends AbstractActionBarActivity {
         // back may exit the app instead of closing the search action bar
         if (searchView != null && !searchView.isIconified()) {
             searchView.setIconified(true);
-            MenuItemCompat.collapseActionView(searchItem);
+            searchItem.collapseActionView();
         } else {
             super.onBackPressed();
         }

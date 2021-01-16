@@ -1,14 +1,16 @@
 package cgeo.geocaching.ui;
 
+import cgeo.geocaching.ui.dialog.ContextMenuDialog;
 import cgeo.geocaching.utils.CryptUtils;
-
-import android.support.annotation.NonNull;
+import cgeo.geocaching.utils.functions.Action1;
 
 import android.text.Spannable;
 import android.view.View;
 import android.widget.TextView;
 
-public class DecryptTextClickListener implements View.OnClickListener {
+import androidx.annotation.NonNull;
+
+public class DecryptTextClickListener implements View.OnClickListener, Action1<ContextMenuDialog.Item> {
 
     @NonNull private final TextView targetView;
 
@@ -28,5 +30,10 @@ public class DecryptTextClickListener implements View.OnClickListener {
         } catch (final RuntimeException ignored) {
             // nothing
         }
+    }
+
+    @Override
+    public void call(final ContextMenuDialog.Item item) {
+        onClick(null);
     }
 }

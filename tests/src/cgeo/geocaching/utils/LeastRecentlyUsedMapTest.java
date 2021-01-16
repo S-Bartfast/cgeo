@@ -1,16 +1,16 @@
 package cgeo.geocaching.utils;
 
-import junit.framework.TestCase;
+import cgeo.geocaching.models.Geocache;
 
 import java.util.Map;
 
-import cgeo.geocaching.models.Geocache;
-
+import org.junit.Test;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
-public class LeastRecentlyUsedMapTest extends TestCase {
+public class LeastRecentlyUsedMapTest {
 
-    public static void testLruMode() {
+    @Test
+    public void testLruMode() {
         final Map<String, String> map = new LeastRecentlyUsedMap.LruCache<>(4);
         map.put("one", "1");
         map.put("two", "2");
@@ -29,7 +29,8 @@ public class LeastRecentlyUsedMapTest extends TestCase {
         assertThat(map.keySet()).containsExactly("six", "one", "five", "seven");
     }
 
-    public static void testBoundedMode() {
+    @Test
+    public void testBoundedMode() {
         final Map<String, String> map = new LeastRecentlyUsedMap.Bounded<>(5);
         map.put("one", "1");
         map.put("two", "2");
@@ -48,7 +49,8 @@ public class LeastRecentlyUsedMapTest extends TestCase {
         assertThat(map.keySet()).containsExactly("four", "three", "five", "six", "seven");
     }
 
-    public static void testRemoveEldestEntry() {
+    @Test
+    public void testRemoveEldestEntry() {
         final LeastRecentlyUsedMap<String, Geocache> cache = new LeastRecentlyUsedMap.LruCache<>(10);
         final Geocache first = new Geocache();
         assertThat(cache.put("1", first)).isNull();

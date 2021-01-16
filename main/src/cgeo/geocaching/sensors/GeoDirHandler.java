@@ -1,17 +1,15 @@
 package cgeo.geocaching.sensors;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.util.concurrent.TimeUnit;
 
-import io.reactivex.BackpressureStrategy;
-import io.reactivex.Flowable;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.BiFunction;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.core.BackpressureStrategy;
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 
 /**
@@ -50,6 +48,11 @@ public abstract class GeoDirHandler {
     public void updateDirection(final float direction) {
     }
 
+    public void updateDirectionData(final DirectionData directionData) {
+        updateDirection(directionData.getDirection());
+    }
+
+
     /**
      * Update method called when new data is available. This method is called on the UI thread.
      * {@link #start(int)} must be called with the {@link #UPDATE_GEODIR} flag set.
@@ -62,6 +65,11 @@ public abstract class GeoDirHandler {
      */
     public void updateGeoDir(@NonNull final GeoData geoData, final float direction) {
     }
+
+    public void updateGeoDirData(@NonNull final GeoData geoData, final DirectionData directionData) {
+        updateGeoDir(geoData, directionData.getDirection());
+    }
+
 
     private static <T> Flowable<T> throttleIfNeeded(final Observable<T> observable, final long windowDuration, final TimeUnit unit) {
         return (windowDuration > 0 ? observable.throttleFirst(windowDuration, unit) : observable).toFlowable(BackpressureStrategy.LATEST);
@@ -91,34 +99,14 @@ public abstract class GeoDirHandler {
         final Sensors sensors = Sensors.getInstance();
 
         if ((flags & UPDATE_GEODATA) != 0) {
-            disposables.add(throttleIfNeeded(sensors.geoDataObservable(lowPower).observeOn(AndroidSchedulers.mainThread()), windowDuration, unit).subscribe(new Consumer<GeoData>() {
-                @Override
-                public void accept(final GeoData geoData) {
-                    updateGeoData(geoData);
-                }
-            }));
+            disposables.add(throttleIfNeeded(sensors.geoDataObservable(lowPower).observeOn(AndroidSchedulers.mainThread()), windowDuration, unit).subscribe(this::updateGeoData));
         }
         if ((flags & UPDATE_DIRECTION) != 0) {
-            disposables.add(throttleIfNeeded(sensors.directionObservable().observeOn(AndroidSchedulers.mainThread()), windowDuration, unit).subscribe(new Consumer<Float>() {
-                @Override
-                public void accept(final Float direction) {
-                    updateDirection(direction);
-                }
-            }));
+            disposables.add(throttleIfNeeded(sensors.directionDataObservable().observeOn(AndroidSchedulers.mainThread()), windowDuration, unit).subscribe(this::updateDirectionData));
         }
         if ((flags & UPDATE_GEODIR) != 0) {
             // combineOnLatest() does not implement backpressure handling, so we need to explicitly use a backpressure operator there.
-            disposables.add(throttleIfNeeded(Observable.combineLatest(sensors.geoDataObservable(lowPower), sensors.directionObservable(), new BiFunction<GeoData, Float, ImmutablePair<GeoData, Float>>() {
-                @Override
-                public ImmutablePair<GeoData, Float> apply(final GeoData geoData, final Float direction) {
-                    return ImmutablePair.of(geoData, direction);
-                }
-            }).observeOn(AndroidSchedulers.mainThread()), windowDuration, unit).subscribe(new Consumer<ImmutablePair<GeoData, Float>>() {
-                @Override
-                public void accept(final ImmutablePair<GeoData, Float> geoDir) {
-                    updateGeoDir(geoDir.left, geoDir.right);
-                }
-            }));
+            disposables.add(throttleIfNeeded(Observable.combineLatest(sensors.geoDataObservable(lowPower), sensors.directionDataObservable(), ImmutablePair::of).observeOn(AndroidSchedulers.mainThread()), windowDuration, unit).subscribe(geoDir -> updateGeoDirData(geoDir.left, geoDir.right)));
         }
         return disposables;
     }

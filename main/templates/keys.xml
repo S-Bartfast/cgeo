@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Google Maps -->
-    <string name="maps_api_key" translatable="false">@maps.api.key@</string>
+    <string name="maps_api2_key" translatable="false">@maps.api2.key@</string>
 
     <!-- Opencaching.de -->
     <string name="oc_de_okapi_consumer_key" translatable="false">@ocde.okapi.consumer.key@</string>
@@ -26,4 +26,8 @@
     <!-- Opencache.uk -->
     <string name="oc_uk2_okapi_consumer_key" translatable="false">@ocuk.okapi.consumer.key@</string>
     <string name="oc_uk2_okapi_consumer_secret" translatable="false">@ocuk.okapi.consumer.secret@</string>
+
+    <!-- Geocaching.su -->
+    <string name="su_consumer_key" translatable="false">@su.consumer.key@</string>
+    <string name="su_consumer_secret" translatable="false">@su.consumer.secret@</string>
 </resources>

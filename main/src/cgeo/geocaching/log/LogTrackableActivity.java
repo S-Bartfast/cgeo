@@ -23,33 +23,23 @@ import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.settings.SettingsActivity;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.twitter.Twitter;
+import cgeo.geocaching.ui.DateTimeEditor;
 import cgeo.geocaching.ui.dialog.CoordinatesInputDialog;
 import cgeo.geocaching.ui.dialog.CoordinatesInputDialog.CoordinateUpdate;
-import cgeo.geocaching.ui.dialog.DateDialog;
-import cgeo.geocaching.ui.dialog.DateDialog.DateDialogParent;
 import cgeo.geocaching.ui.dialog.Dialogs;
-import cgeo.geocaching.ui.dialog.TimeDialog;
-import cgeo.geocaching.ui.dialog.TimeDialog.TimeDialogParent;
 import cgeo.geocaching.utils.AndroidRxUtils;
 import cgeo.geocaching.utils.AsyncTaskWithProgress;
-import cgeo.geocaching.utils.Formatter;
 import cgeo.geocaching.utils.Log;
-import cgeo.geocaching.utils.functions.Func1;
 
 import android.R.layout;
 import android.R.string;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.LoaderManager;
-import android.support.v4.content.Loader;
 import android.view.ContextMenu;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -61,22 +51,22 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
+import androidx.loader.app.LoaderManager;
+import androidx.loader.content.Loader;
+
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
-public class LogTrackableActivity extends AbstractLoggingActivity implements DateDialogParent, TimeDialogParent, CoordinateUpdate, LoaderManager.LoaderCallbacks<List<LogTypeTrackable>> {
+public class LogTrackableActivity extends AbstractLoggingActivity implements CoordinateUpdate, LoaderManager.LoaderCallbacks<List<LogTypeTrackable>> {
 
     @BindView(R.id.type) protected Button typeButton;
-    @BindView(R.id.date) protected Button dateButton;
-    @BindView(R.id.time) protected Button timeButton;
     @BindView(R.id.geocode) protected AutoCompleteTextView geocodeEditText;
     @BindView(R.id.coordinates) protected Button coordinatesButton;
     @BindView(R.id.tracking) protected EditText trackingEditText;
@@ -94,7 +84,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
      * As long as we still fetch the current state of the trackable from the Internet, the user cannot yet send a log.
      */
     private boolean postReady = true;
-    private Calendar date = Calendar.getInstance();
+    private final DateTimeEditor date = new DateTimeEditor();
     private LogTypeTrackable typeSelected = LogTypeTrackable.getById(Settings.getTrackableAction());
     private Trackable trackable;
     private TrackableBrand brand;
@@ -111,6 +101,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
     public static final int LOG_TRACKABLE = 1;
 
     @Override
+    @NonNull
     public Loader<List<LogTypeTrackable>> onCreateLoader(final int id, final Bundle bundle) {
         showProgress(true);
 
@@ -122,16 +113,16 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
     }
 
     @Override
-    public void onLoadFinished(final Loader<List<LogTypeTrackable>> listLoader, final List<LogTypeTrackable> logTypesTrackable) {
+    public void onLoadFinished(@NonNull final Loader<List<LogTypeTrackable>> listLoader, final List<LogTypeTrackable> logTypesTrackable) {
 
         if (CollectionUtils.isNotEmpty(logTypesTrackable)) {
             possibleLogTypesTrackable.clear();
             possibleLogTypesTrackable.addAll(logTypesTrackable);
-        }
 
-        if (logTypesTrackable != null && !logTypesTrackable.contains(typeSelected) && !logTypesTrackable.isEmpty()) {
-            setType(logTypesTrackable.get(0));
-            showToast(res.getString(R.string.info_log_type_changed));
+            if (!logTypesTrackable.contains(typeSelected)) {
+                setType(logTypesTrackable.get(0));
+                showToast(res.getString(R.string.info_log_type_changed));
+            }
         }
 
         postReady = loggingManager.postReady(); // we're done, user can post log
@@ -140,7 +131,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
     }
 
     @Override
-    public void onLoaderReset(final Loader<List<LogTypeTrackable>> listLoader) {
+    public void onLoaderReset(@NonNull final Loader<List<LogTypeTrackable>> listLoader) {
         // nothing
     }
 
@@ -148,6 +139,8 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
     public void onCreate(final Bundle savedInstanceState) {
         onCreate(savedInstanceState, R.layout.logtrackable_activity);
         ButterKnife.bind(this);
+
+        date.init(findViewById(R.id.date), findViewById(R.id.time), getSupportFragmentManager());
 
         // get parameters
         final Bundle extras = getIntent().getExtras();
@@ -211,36 +204,30 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
 
         createDisposables.add(AndroidRxUtils.bindActivity(this, ConnectorFactory.loadTrackable(geocode, null, null, brand))
                 .toSingle()
-                .subscribe(new Consumer<Trackable>() {
-            @Override
-            public void accept(final Trackable newTrackable) {
-                if (trackingCode != null) {
-                    newTrackable.setTrackingcode(trackingCode);
-                }
-                startLoader(newTrackable);
-            }
-        }, new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) throws Exception {
-                Log.e("cannot load trackable " + geocode, throwable);
-                showProgress(false);
+                .subscribe(newTrackable -> {
+                    if (trackingCode != null) {
+                        newTrackable.setTrackingcode(trackingCode);
+                    }
+                    startLoader(newTrackable);
+                }, throwable -> {
+                    Log.e("cannot load trackable " + geocode, throwable);
+                    showProgress(false);
 
-                if (StringUtils.isNotBlank(geocode)) {
-                    showToast(res.getString(R.string.err_tb_find) + ' ' + geocode + '.');
-                } else {
-                    showToast(res.getString(R.string.err_tb_find_that));
-                }
+                    if (StringUtils.isNotBlank(geocode)) {
+                        showToast(res.getString(R.string.err_tb_find) + ' ' + geocode + '.');
+                    } else {
+                        showToast(res.getString(R.string.err_tb_find_that));
+                    }
 
-                setResult(RESULT_CANCELED);
-                finish();
-            }
-        }));
+                    setResult(RESULT_CANCELED);
+                    finish();
+                }));
     }
 
     private void startLoader(@NonNull final Trackable newTrackable) {
         trackable = newTrackable;
         // Start loading in background
-        getSupportLoaderManager().initLoader(connector.getTrackableLoggingManagerLoaderId(), null, LogTrackableActivity.this).forceLoad();
+        LoaderManager.getInstance(this).initLoader(connector.getTrackableLoggingManagerLoaderId(), null, LogTrackableActivity.this).forceLoad();
         displayTrackable();
     }
 
@@ -280,7 +267,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
     }
 
     @Override
-    public void onConfigurationChanged(final Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull final Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
         init();
@@ -314,25 +301,12 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
 
     private void init() {
         registerForContextMenu(typeButton);
-        typeButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(final View view) {
-                openContextMenu(view);
-            }
-        });
+        typeButton.setOnClickListener(this::openContextMenu);
 
         setType(typeSelected);
-        dateButton.setOnClickListener(new DateListener());
-        setDate(date);
 
         // show/hide Time selector
-        if (loggingManager.canLogTime()) {
-            timeButton.setOnClickListener(new TimeListener());
-            setTime(date);
-            timeButton.setVisibility(View.VISIBLE);
-        } else {
-            timeButton.setVisibility(View.GONE);
-        }
+        date.setTimeVisible(loggingManager.canLogTime());
 
         // Register Coordinates Listener
         if (loggingManager.canLogCoordinates()) {
@@ -356,25 +330,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
      * Link the geocodeEditText to the SuggestionsGeocode.
      */
     private void initGeocodeSuggestions() {
-        geocodeEditText.setAdapter(new AutoCompleteAdapter(geocodeEditText.getContext(), layout.simple_dropdown_item_1line, new Func1<String, String[]>() {
-
-            @Override
-            public String[] call(final String input) {
-                return DataStore.getSuggestionsGeocode(input);
-            }
-        }));
-    }
-
-    @Override
-    public void setDate(final Calendar dateIn) {
-        date = dateIn;
-        dateButton.setText(Formatter.formatShortDateVerbally(date.getTime().getTime()));
-    }
-
-    @Override
-    public void setTime(final Calendar dateIn) {
-        date = dateIn;
-        timeButton.setText(Formatter.formatTime(date.getTime().getTime()));
+        geocodeEditText.setAdapter(new AutoCompleteAdapter(geocodeEditText.getContext(), layout.simple_dropdown_item_1line, DataStore::getSuggestionsGeocode));
     }
 
     public void setType(final LogTypeTrackable type) {
@@ -425,23 +381,9 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
         geocache.setCoords(geopoint);
     }
 
-    private class DateListener implements View.OnClickListener {
-
-        @Override
-        public void onClick(final View arg0) {
-            final DateDialog dateDialog = DateDialog.getInstance(date);
-            dateDialog.setCancelable(true);
-            dateDialog.show(getSupportFragmentManager(), "date_dialog");
-        }
-    }
-
-    private class TimeListener implements View.OnClickListener {
-        @Override
-        public void onClick(final View arg0) {
-            final TimeDialog timeDialog = TimeDialog.getInstance(date);
-            timeDialog.setCancelable(true);
-            timeDialog.show(getSupportFragmentManager(), "time_dialog");
-        }
+    @Override
+    public boolean supportsNullCoordinates() {
+        return false;
     }
 
     private class CoordinatesListener implements View.OnClickListener {
@@ -483,7 +425,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
                 final TrackableLog trackableLog = new TrackableLog(trackable.getGeocode(), trackable.getTrackingcode(), trackable.getName(), 0, 0, trackable.getBrand());
                 trackableLog.setAction(typeSelected);
                 // Real call to post log
-                final LogResult logResult = loggingManager.postLog(geocache, trackableLog, date, logMsg);
+                final LogResult logResult = loggingManager.postLog(geocache, trackableLog, date.getCalendar(), logMsg);
 
                 // Now posting tweet if log is OK
                 if (logResult.getPostLogResult() == StatusCode.NO_ERROR) {
@@ -491,7 +433,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
                     if (tweetCheck.isChecked() && tweetBox.getVisibility() == View.VISIBLE) {
                         // TODO oldLogType as a temp workaround...
                         final LogEntry logNow = new LogEntry.Builder()
-                                .setDate(date.getTimeInMillis())
+                                .setDate(date.getDate().getTime())
                                 .setLogType(typeSelected.oldLogtype)
                                 .setLog(logMsg)
                                 .build();
@@ -534,7 +476,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
         private void addLocalTrackableLog(final String logText) {
             // TODO create a LogTrackableEntry. For now use "oldLogtype" as a temporary migration path
             final LogEntry logEntry = new LogEntry.Builder()
-                    .setDate(date.getTimeInMillis())
+                    .setDate(date.getDate().getTime())
                     .setLogType(typeSelected.oldLogtype)
                     .setLog(logText)
                     .build();
@@ -566,29 +508,24 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
 
     @Override
     public boolean onOptionsItemSelected(final MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.menu_send:
-                if (connector.isRegistered()) {
-                    sendLog();
-                } else {
-                    // Redirect user to concerned connector settings
-                    Dialogs.confirmYesNo(this, res.getString(R.string.settings_title_open_settings), res.getString(R.string.err_trackable_log_not_anonymous, trackable.getBrand().getLabel(), connector.getServiceTitle()), new OnClickListener() {
-                        @Override
-                        public void onClick(final DialogInterface dialog, final int which) {
-                            if (connector.getPreferenceActivity() > 0) {
-                                SettingsActivity.openForScreen(connector.getPreferenceActivity(), LogTrackableActivity.this);
-                            } else {
-                                showToast(res.getString(R.string.err_trackable_no_preference_activity));
-                            }
-                        }
-                    });
-                }
-                return true;
-            default:
-                break;
+        final int itemId = item.getItemId();
+        if (itemId == R.id.menu_send) {
+            if (connector.isRegistered()) {
+                sendLog();
+            } else {
+                // Redirect user to concerned connector settings
+                Dialogs.confirmYesNo(this, res.getString(R.string.settings_title_open_settings), res.getString(R.string.err_trackable_log_not_anonymous, trackable.getBrand().getLabel(), connector.getServiceTitle()), (dialog, which) -> {
+                    if (connector.getPreferenceActivity() > 0) {
+                        SettingsActivity.openForScreen(connector.getPreferenceActivity(), LogTrackableActivity.this);
+                    } else {
+                        showToast(res.getString(R.string.err_trackable_no_preference_activity));
+                    }
+                });
+            }
+        } else {
+            return super.onOptionsItemSelected(item);
         }
-
-        return super.onOptionsItemSelected(item);
+        return true;
     }
 
     /**
@@ -638,7 +575,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
     public boolean onCreateOptionsMenu(final Menu menu) {
         final boolean result = super.onCreateOptionsMenu(menu);
         for (final LogTemplate template : LogTemplateProvider.getTemplatesWithoutSignature()) {
-            if (template.getTemplateString().equals("NUMBER")) {
+            if (template.getTemplateString().equals("NUMBER") || template.getTemplateString().equals("ONLINENUM")) {
                 menu.findItem(R.id.menu_templates).getSubMenu().removeItem(template.getItemId());
             }
         }
@@ -660,7 +597,7 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
         private CheckBox doNotAskAgain;
 
         public AlertDialog create(final Activity activity) {
-            final AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+            final AlertDialog.Builder builder = Dialogs.newBuilder(activity);
             builder.setTitle(R.string.trackable_title_log_without_geocode);
 
             final View layout = View.inflate(activity, R.layout.logtrackable_without_geocode, null);
@@ -671,21 +608,15 @@ public class LogTrackableActivity extends AbstractLoggingActivity implements Dat
             final int showCount = Settings.getLogTrackableWithoutGeocodeShowCount();
             Settings.setLogTrackableWithoutGeocodeShowCount(showCount + 1);
 
-            builder.setPositiveButton(string.yes, new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(final DialogInterface dialog, final int which) {
-                    checkDoNotAskAgain();
-                    dialog.dismiss();
-                }
+            builder.setPositiveButton(string.yes, (dialog, which) -> {
+                checkDoNotAskAgain();
+                dialog.dismiss();
             });
-            builder.setNegativeButton(string.no, new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(final DialogInterface dialog, final int which) {
-                    checkDoNotAskAgain();
-                    dialog.dismiss();
-                    // Post the log
-                    postLog();
-                }
+            builder.setNegativeButton(string.no, (dialog, which) -> {
+                checkDoNotAskAgain();
+                dialog.dismiss();
+                // Post the log
+                postLog();
             });
             return builder.create();
         }

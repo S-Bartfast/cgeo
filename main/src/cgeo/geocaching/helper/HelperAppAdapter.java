@@ -2,25 +2,26 @@ package cgeo.geocaching.helper;
 
 import cgeo.geocaching.R;
 import cgeo.geocaching.compatibility.Compatibility;
-import cgeo.geocaching.ui.recyclerview.AbstractRecyclerViewAdapter;
 import cgeo.geocaching.ui.recyclerview.AbstractRecyclerViewHolder;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.support.annotation.NonNull;
-import android.text.Html;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.core.text.HtmlCompat;
+import androidx.recyclerview.widget.RecyclerView;
+
 import java.util.Arrays;
 import java.util.List;
 
 import butterknife.BindView;
 
-final class HelperAppAdapter extends AbstractRecyclerViewAdapter<HelperAppAdapter.ViewHolder> {
+final class HelperAppAdapter extends RecyclerView.Adapter<HelperAppAdapter.ViewHolder> {
 
     @NonNull private final List<HelperApp> helperApps;
     @NonNull private final HelperAppClickListener clickListener;
@@ -51,13 +52,9 @@ final class HelperAppAdapter extends AbstractRecyclerViewAdapter<HelperAppAdapte
     public ViewHolder onCreateViewHolder(final ViewGroup parent, final int viewType) {
         final View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.usefulapps_item, parent, false);
         final ViewHolder viewHolder = new ViewHolder(view);
-        viewHolder.itemView.setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(final View view) {
-                final HelperApp app = helperApps.get(viewHolder.getItemPosition());
-                clickListener.onClickHelperApp(app);
-            }
+        viewHolder.itemView.setOnClickListener(view1 -> {
+            final HelperApp app = helperApps.get(viewHolder.getAdapterPosition());
+            clickListener.onClickHelperApp(app);
         });
 
         return viewHolder;
@@ -65,13 +62,11 @@ final class HelperAppAdapter extends AbstractRecyclerViewAdapter<HelperAppAdapte
 
     @Override
     public void onBindViewHolder(final ViewHolder holder, final int position) {
-        super.onBindViewHolder(holder, position);
-
         final HelperApp app = helperApps.get(position);
         final Resources resources = context.getResources();
         holder.title.setText(resources.getString(app.titleId));
         holder.image.setImageDrawable(Compatibility.getDrawable(resources, app.iconId));
-        holder.description.setText(Html.fromHtml(resources.getString(app.descriptionId)));
+        holder.description.setText(HtmlCompat.fromHtml(resources.getString(app.descriptionId), HtmlCompat.FROM_HTML_MODE_LEGACY));
     }
 
 }

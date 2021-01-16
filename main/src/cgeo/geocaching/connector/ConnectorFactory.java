@@ -2,6 +2,7 @@ package cgeo.geocaching.connector;
 
 import cgeo.geocaching.R;
 import cgeo.geocaching.SearchResult;
+import cgeo.geocaching.connector.capability.ICredentials;
 import cgeo.geocaching.connector.capability.ILogin;
 import cgeo.geocaching.connector.capability.ISearchByCenter;
 import cgeo.geocaching.connector.capability.ISearchByFinder;
@@ -12,14 +13,14 @@ import cgeo.geocaching.connector.capability.ISearchByViewPort;
 import cgeo.geocaching.connector.ec.ECConnector;
 import cgeo.geocaching.connector.ga.GeocachingAustraliaConnector;
 import cgeo.geocaching.connector.gc.GCConnector;
-import cgeo.geocaching.connector.gc.MapTokens;
 import cgeo.geocaching.connector.ge.GeopeitusConnector;
+import cgeo.geocaching.connector.internal.InternalConnector;
 import cgeo.geocaching.connector.oc.OCApiConnector.ApiSupport;
 import cgeo.geocaching.connector.oc.OCApiLiveConnector;
 import cgeo.geocaching.connector.oc.OCCZConnector;
 import cgeo.geocaching.connector.oc.OCConnector;
 import cgeo.geocaching.connector.oc.OCDEConnector;
-import cgeo.geocaching.connector.su.GeocachingSuConnector;
+import cgeo.geocaching.connector.su.SuConnector;
 import cgeo.geocaching.connector.tc.TerraCachingConnector;
 import cgeo.geocaching.connector.trackable.GeokretyConnector;
 import cgeo.geocaching.connector.trackable.GeolutinsConnector;
@@ -28,27 +29,29 @@ import cgeo.geocaching.connector.trackable.TrackableConnector;
 import cgeo.geocaching.connector.trackable.TrackableTrackingCode;
 import cgeo.geocaching.connector.trackable.TravelBugConnector;
 import cgeo.geocaching.connector.trackable.UnknownTrackableConnector;
+import cgeo.geocaching.connector.unknown.UnknownConnector;
+import cgeo.geocaching.connector.wm.WaymarkingConnector;
+import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.location.Viewport;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Trackable;
+import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.utils.AndroidRxUtils;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Callable;
 
-import io.reactivex.Maybe;
-import io.reactivex.Observable;
-import io.reactivex.functions.Function;
-import io.reactivex.functions.Predicate;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Maybe;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.functions.Function;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.commons.lang3.StringUtils;
 
 public final class ConnectorFactory {
@@ -77,7 +80,8 @@ public final class ConnectorFactory {
             new GeopeitusConnector(),
             new TerraCachingConnector(),
             new WaymarkingConnector(),
-            GeocachingSuConnector.getInstance(),
+            SuConnector.getInstance(),
+            InternalConnector.getInstance(),
             UNKNOWN_CONNECTOR // the unknown connector MUST be the last one
     ));
 
@@ -110,7 +114,6 @@ public final class ConnectorFactory {
     private static final Collection<ISearchByFinder> SEARCH_BY_FINDER_CONNECTORS = getMatchingConnectors(ISearchByFinder.class);
 
     private static boolean forceRelog = false; // c:geo needs to log into cache providers
-    public static boolean showLoginToast = true; //login toast shown just once.
 
     private ConnectorFactory() {
         // utility class
@@ -167,6 +170,46 @@ public final class ConnectorFactory {
             }
         }
         return liveConns.toArray(new ILogin[liveConns.size()]);
+    }
+
+    @NonNull
+    public static IConnector[] getActiveConnectorsWithValidCredentials() {
+        final List<IConnector> credConns = new ArrayList<>();
+        for (final IConnector conn : CONNECTORS) {
+            if (conn instanceof ILogin && conn instanceof ICredentials && conn.isActive() && Settings.getCredentials((ICredentials) conn).isValid()) {
+                credConns.add(conn);
+            }
+        }
+        return credConns.toArray(new IConnector[credConns.size()]);
+    }
+
+    @NonNull
+    public static List<IConnector> getActiveConnectors() {
+        final List<IConnector> activeConnectors = new ArrayList<>();
+        for (final IConnector conn : CONNECTORS) {
+            if (conn.isActive()) {
+                activeConnectors.add(conn);
+            }
+        }
+        return activeConnectors;
+    }
+
+    public static boolean anyConnectorActive() {
+        for (final IConnector conn : CONNECTORS) {
+            if (conn.isActive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean anyTrackableConnectorActive() {
+        for (final TrackableConnector conn : TRACKABLE_CONNECTORS) {
+            if (conn.isActive()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean canHandle(@Nullable final String geocode) {
@@ -304,15 +347,17 @@ public final class ConnectorFactory {
         return StringUtils.isBlank(geocode) || !Character.isLetterOrDigit(geocode.charAt(0));
     }
 
-    /** @see ISearchByViewPort#searchByViewport */
+    /**
+     * @see ISearchByViewPort#searchByViewport
+     */
     @NonNull
-    public static SearchResult searchByViewport(@NonNull final Viewport viewport, @Nullable final MapTokens tokens) {
-        return SearchResult.parallelCombineActive(searchByViewPortConns, new Function<ISearchByViewPort, SearchResult>() {
-            @Override
-            public SearchResult apply(final ISearchByViewPort connector) {
-                return connector.searchByViewport(viewport, tokens);
-            }
-        });
+    public static SearchResult searchByViewport(@NonNull final Viewport viewport) {
+        //shortcut: no need to search any server for "user-defined" caches
+        if (Settings.getCacheType() != null && Settings.getCacheType().equals(CacheType.USER_DEFINED)) {
+            return new SearchResult();
+        }
+
+        return SearchResult.parallelCombineActive(searchByViewPortConns, connector -> connector.searchByViewport(viewport));
     }
 
     @Nullable
@@ -395,38 +440,13 @@ public final class ConnectorFactory {
     public static Maybe<Trackable> loadTrackable(final String geocode, final String guid, final String id, final TrackableBrand brand) {
         if (StringUtils.isEmpty(geocode)) {
             // Only solution is GC search by uid
-            return Maybe.fromCallable(new Callable<Trackable>() {
-                @Override
-                public Trackable call() {
-                    return TravelBugConnector.getInstance().searchTrackable(geocode, guid, id);
-                }
-            }).subscribeOn(AndroidRxUtils.networkScheduler);
+            return Maybe.fromCallable(() -> TravelBugConnector.getInstance().searchTrackable(geocode, guid, id)).subscribeOn(AndroidRxUtils.networkScheduler);
         }
 
         final Observable<Trackable> fromNetwork =
-                Observable.fromIterable(getTrackableConnectors()).filter(new Predicate<TrackableConnector>() {
-                    @Override
-                    public boolean test(final TrackableConnector trackableConnector) {
-                        return trackableConnector.canHandleTrackable(geocode, brand);
-                    }
-                }).flatMapMaybe(new Function<TrackableConnector, Maybe<Trackable>>() {
-                    @Override
-                    public Maybe<Trackable> apply(final TrackableConnector trackableConnector) {
-                        return Maybe.fromCallable(new Callable<Trackable>() {
-                            @Override
-                            public Trackable call() {
-                                return trackableConnector.searchTrackable(geocode, guid, id);
-                            }
-                        }).subscribeOn(AndroidRxUtils.networkScheduler);
-                    }
-                });
+                Observable.fromIterable(getTrackableConnectors()).filter(trackableConnector -> trackableConnector.canHandleTrackable(geocode, brand)).flatMapMaybe((Function<TrackableConnector, Maybe<Trackable>>) trackableConnector -> Maybe.fromCallable(() -> trackableConnector.searchTrackable(geocode, guid, id)).subscribeOn(AndroidRxUtils.networkScheduler));
 
-        final Maybe<Trackable> fromLocalStorage = Maybe.fromCallable(new Callable<Trackable>() {
-            @Override
-            public Trackable call() {
-                return DataStore.loadTrackable(geocode);
-            }
-        }).subscribeOn(Schedulers.io());
+        final Maybe<Trackable> fromLocalStorage = Maybe.fromCallable(() -> DataStore.loadTrackable(geocode)).subscribeOn(Schedulers.io());
 
         return fromNetwork.firstElement().switchIfEmpty(fromLocalStorage);
     }

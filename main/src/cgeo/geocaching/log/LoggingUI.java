@@ -13,6 +13,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.ArrayAdapter;
 
+import androidx.annotation.NonNull;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +36,7 @@ public final class LoggingUI extends AbstractUIFactory {
         }
 
         @Override
+        @NonNull
         public String toString() {
             if (logType == null) {
                 return specialLogType.getL10n();
@@ -65,16 +68,15 @@ public final class LoggingUI extends AbstractUIFactory {
     }
 
     public static boolean onMenuItemSelected(final MenuItem item, final Activity activity, final Geocache cache, final DialogInterface.OnDismissListener listener) {
-        switch (item.getItemId()) {
-            case R.id.menu_log_visit:
-                cache.logVisit(activity);
-                return true;
-            case R.id.menu_log_visit_offline:
-                showOfflineMenu(cache, activity, listener);
-                return true;
-            default:
-                return false;
+        final int itemId = item.getItemId();
+        if (itemId == R.id.menu_log_visit) {
+            cache.logVisit(activity);
+        } else if (itemId == R.id.menu_log_visit_offline) {
+            showOfflineMenu(cache, activity, listener);
+        } else {
+            return false;
         }
+        return true;
     }
 
     private static void showOfflineMenu(final Geocache cache, final Activity activity, final DialogInterface.OnDismissListener listener) {
@@ -96,25 +98,37 @@ public final class LoggingUI extends AbstractUIFactory {
 
         final ArrayAdapter<LogTypeEntry> adapter = new ArrayAdapter<>(activity, android.R.layout.select_dialog_item, list);
 
-        builder.setAdapter(adapter, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(final DialogInterface dialog, final int item) {
-                final LogTypeEntry logTypeEntry = adapter.getItem(item);
-                if (logTypeEntry.logType == null) {
-                    switch (logTypeEntry.specialLogType) {
-                        case LOG_CACHE:
-                            cache.logVisit(activity);
-                            break;
+        builder.setAdapter(adapter, (dialog, item) -> {
+            final LogTypeEntry logTypeEntry = adapter.getItem(item);
+            if (logTypeEntry.logType == null) {
+                switch (logTypeEntry.specialLogType) {
+                    case LOG_CACHE:
+                        cache.logVisit(activity);
+                        break;
 
-                        case CLEAR_LOG:
-                            cache.clearOfflineLog();
-                            break;
-                    }
-                } else {
-                    cache.logOffline(activity, logTypeEntry.logType);
+                    case CLEAR_LOG:
+                        cache.clearOfflineLog();
+                        break;
                 }
-                dialog.dismiss();
+            } else {
+                final ReportProblemType reportProblem;
+                final LogType logType;
+                switch (logTypeEntry.logType) {
+                    case NEEDS_MAINTENANCE:
+                        logType = LogType.NOTE;
+                        reportProblem = ReportProblemType.OTHER;
+                        break;
+                    case NEEDS_ARCHIVE:
+                        logType = LogType.NOTE;
+                        reportProblem = ReportProblemType.ARCHIVE;
+                        break;
+                    default:
+                        logType = logTypeEntry.logType;
+                        reportProblem = ReportProblemType.NO_PROBLEM;
+                }
+                cache.logOffline(activity, logType, reportProblem);
             }
+            dialog.dismiss();
         });
 
         final AlertDialog alertDialog = builder.create();

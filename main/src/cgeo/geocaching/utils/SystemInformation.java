@@ -5,6 +5,7 @@ import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.IConnector;
 import cgeo.geocaching.connector.capability.ILogin;
 import cgeo.geocaching.connector.gc.GCConnector;
+import cgeo.geocaching.maps.routing.Routing;
 import cgeo.geocaching.playservices.GooglePlayServices;
 import cgeo.geocaching.sensors.MagnetometerAndAccelerometerProvider;
 import cgeo.geocaching.sensors.OrientationProvider;
@@ -21,8 +22,9 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Environment;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -49,6 +51,8 @@ public final class SystemInformation {
         } else {
             usedDirectionSensor = "magnetometer & accelerometer";
         }
+        final String hideCaches = (Settings.isExcludeMyCaches() ? "own/found " : "") + (Settings.isExcludeDisabledCaches() ? "disabled " : "") + (Settings.isExcludeArchivedCaches() ? "archived" : "");
+        final String hideWaypoints = (Settings.isExcludeWpOriginal() ? "original " : "") + (Settings.isExcludeWpParking() ? "parking " : "") + (Settings.isExcludeWpVisited() ? "visited" : "");
         final StringBuilder body = new StringBuilder("--- System information ---")
                 .append("\nDevice: ").append(Build.MODEL).append(" (").append(Build.PRODUCT).append(", ").append(Build.BRAND).append(')')
                 .append("\nAndroid version: ").append(VERSION.RELEASE)
@@ -56,32 +60,39 @@ public final class SystemInformation {
                 .append("\nc:geo version: ").append(Version.getVersionName(context));
         appendGooglePlayServicesVersion(context, body);
         body
-                .append("\nLow power mode: ").append(Settings.useLowPowerMode() ? "active" : "inactive")
-                .append("\nCompass capabilities: ").append(Sensors.getInstance().hasCompassCapabilities() ? "yes" : "no")
-                .append("\nRotation vector sensor: ").append(presence(RotationProvider.hasRotationSensor(context)))
-                .append("\nOrientation sensor: ").append(presence(OrientationProvider.hasOrientationSensor(context)))
-                .append("\nMagnetometer & Accelerometer sensor: ").append(presence(MagnetometerAndAccelerometerProvider.hasMagnetometerAndAccelerometerSensors(context)))
-                .append("\nDirection sensor used: ").append(usedDirectionSensor)
-                .append("\nHide own/found: ").append(Settings.isExcludeMyCaches())
-                .append("\nMap strategy: ").append(Settings.getLiveMapStrategy().toString().toLowerCase(Locale.getDefault()))
-                .append("\nHW acceleration: ").append(Settings.useHardwareAcceleration() ? "enabled" : "disabled")
-                .append(" (").append(Settings.useHardwareAcceleration() == HwAccel.hwAccelShouldBeEnabled() ? "default state" : "manually changed").append(')')
-                .append("\nSystem language: ").append(Locale.getDefault());
-        if (Settings.useEnglish()) {
-            body.append(" (c:geo forced to English)");
-        }
-        body.append("\nSystem date format: ").append(Formatter.getShortDateFormat())
-                .append("\nDebug mode active: ").append(Settings.isDebug() ? "yes" : "no");
+            .append("\nLow power mode: ").append(Settings.useLowPowerMode() ? "active" : "inactive")
+            .append("\nCompass capabilities: ").append(Sensors.getInstance().hasCompassCapabilities() ? "yes" : "no")
+            .append("\nRotation vector sensor: ").append(presence(RotationProvider.hasRotationSensor(context)))
+            .append("\nOrientation sensor: ").append(presence(OrientationProvider.hasOrientationSensor(context)))
+            .append("\nMagnetometer & Accelerometer sensor: ").append(presence(MagnetometerAndAccelerometerProvider.hasMagnetometerAndAccelerometerSensors(context)))
+            .append("\nDirection sensor used: ").append(usedDirectionSensor)
+            .append("\nHide caches: ").append(hideCaches.isEmpty() ? "-" : hideCaches)
+            .append("\nHide waypoints: ").append(hideWaypoints.isEmpty() ? "-" : hideWaypoints)
+            .append("\nHW acceleration: ").append(Settings.useHardwareAcceleration() ? "enabled" : "disabled")
+            .append(" (").append(Settings.useHardwareAcceleration() == HwAccel.hwAccelShouldBeEnabled() ? "default state" : "manually changed").append(')')
+            .append("\nSystem language: ").append(Locale.getDefault()).append(" / user-defined language: ").append(Settings.getUserLanguage())
+            .append("\nSystem date format: ").append(Formatter.getShortDateFormat())
+            .append("\nDebug mode active: ").append(Settings.isDebug() ? "yes" : "no");
         appendDirectory(body, "\nSystem internal c:geo dir: ", LocalStorage.getInternalCgeoDirectory());
         appendDirectory(body, "\nUser storage c:geo dir: ", LocalStorage.getExternalPublicCgeoDirectory());
         appendDirectory(body, "\nGeocache data: ", LocalStorage.getGeocacheDataDirectory());
         appendDatabase(body);
+        body
+                .append("\nLast backup: ").append(BackupUtils.hasBackup(BackupUtils.newestBackupFolder()) ? BackupUtils.getNewestBackupDateTime() : "never")
+                .append("\nGPX import path: ").append(Settings.getGpxImportDir())
+                .append("\nGPX export path: ").append(Settings.getGpxExportDir())
+                .append("\nOffline maps path: ").append(Settings.getMapFileDirectory())
+                .append("\nMap render theme path: ").append(Settings.getCustomRenderThemeFilePath())
+                .append("\nLive map mode: ").append(Settings.isLiveMap())
+                .append("\nGlobal filter: ").append(Settings.getCacheType().pattern)
+                .append("\nSailfish OS detected: ").append(EnvironmentUtils.isSailfishOs());
         appendPermissions(context, body);
         appendConnectors(body);
         if (GCConnector.getInstance().isActive()) {
             body.append("\nGeocaching.com date format: ").append(Settings.getGcCustomDate());
         }
         appendAddons(body);
+        body.append("\nBRouter connection available: ").append(Routing.isAvailable());
         body.append("\n--- End of system information ---\n");
         return body.toString();
     }
@@ -98,8 +109,6 @@ public final class SystemInformation {
         try {
             if (directory.getAbsolutePath().startsWith(LocalStorage.getInternalCgeoDirectory().getAbsolutePath())) {
                 body.append(" internal");
-            } else if (VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-                body.append(" external");
             } else if (Environment.isExternalStorageRemovable(directory)) {
                 body.append(" external removable");
             } else {

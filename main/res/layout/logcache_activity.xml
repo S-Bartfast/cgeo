@@ -6,7 +6,7 @@
     android:background="?background_color"
     android:orientation="vertical"
     android:padding="4dip"
-    tools:context=".log.LogCacheActivity" >
+    tools:context=".log.LogCacheActivity">
 
     <LinearLayout
         android:layout_width="fill_parent"
@@ -45,10 +45,21 @@
                 style="@style/edittext_full"
                 android:layout_height="wrap_content"
                 android:hint="@string/log_new_log_text"
+                android:autofillHints="@string/log_new_log_text"
                 android:inputType="textMultiLine|textCapSentences"
                 android:maxLength="4000"
                 android:minLines="5"
                 tools:text="The log text is limited to 4000 characters."/>
+
+            <TextView
+                android:id="@+id/log_characters_counter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="10dip"
+                android:layout_gravity="right"
+                android:visibility="gone"
+                android:textColor="?text_color"
+                android:textSize="14sp" />
 
             <LinearLayout
                 android:id="@+id/log_password_box"
@@ -72,9 +83,47 @@
                     android:id="@+id/log_password"
                     style="@style/edittext_full"
                     android:hint="@string/log_hint_log_password"
+                    android:importantForAutofill="no"
                     android:inputType="text"
                     tools:ignore="TextFields"
                     android:maxLines="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/report_problem_box"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="5dip"
+                android:paddingLeft="10dip"
+                android:paddingRight="10dip"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="left"
+                    android:lines="1"
+                    android:maxLines="1"
+                    android:text="@string/log_report_problem"
+                    android:textIsSelectable="false"
+                    android:textColor="?text_color"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/report_problem"
+                    android:layout_width="fill_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="right"
+                    android:lines="1"
+                    android:maxLines="1"
+                    android:textColor="?text_color"
+                    android:textIsSelectable="false"
+                    tools:text="report problem"
+                    android:textSize="14sp"
+                    />
+
             </LinearLayout>
 
             <include layout="@layout/gcvote_rating_bar"  android:layout_width="wrap_content" android:layout_height="wrap_content"/>
@@ -103,6 +152,12 @@
                 tools:visibility="visible"                />
 
         </LinearLayout>
+
+        <fragment
+            android:id="@+id/imagelist_fragment"
+            class="cgeo.geocaching.ui.ImageListFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
 
         <LinearLayout
             android:id="@+id/inventory_box"

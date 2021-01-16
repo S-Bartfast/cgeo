@@ -8,7 +8,8 @@ import cgeo.geocaching.utils.Log;
 import android.content.Context;
 import android.location.Location;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,14 +20,10 @@ import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
-import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.disposables.Disposables;
-import io.reactivex.functions.Predicate;
-import io.reactivex.observers.DisposableObserver;
-import io.reactivex.subjects.ReplaySubject;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.observers.DisposableObserver;
+import io.reactivex.rxjava3.subjects.ReplaySubject;
 
 public class LocationProvider extends LocationCallback implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
@@ -69,43 +66,34 @@ public class LocationProvider extends LocationCallback implements GoogleApiClien
     private static Observable<GeoData> get(final Context context, final AtomicInteger reference) {
         final LocationProvider instance = getInstance(context);
 
-        return Observable.create(new ObservableOnSubscribe<GeoData>() {
-            @Override
-            public void subscribe(final ObservableEmitter<GeoData> emitter) throws Exception {
-                if (reference.incrementAndGet() == 1) {
-                    instance.updateRequest();
-                }
-                final Disposable disposable = subject.subscribeWith(new DisposableObserver<GeoData>() {
-                    @Override
-                    public void onNext(final GeoData value) {
-                        emitter.onNext(value);
-                    }
-
-                    @Override
-                    public void onError(final Throwable e) {
-                        emitter.onError(e);
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        emitter.onComplete();
-                    }
-                });
-                emitter.setDisposable(Disposables.fromRunnable(new Runnable() {
-                    @Override
-                    public void run() {
-                        disposable.dispose();
-                        AndroidRxUtils.looperCallbacksScheduler.scheduleDirect(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (reference.decrementAndGet() == 0) {
-                                    instance.updateRequest();
-                                }
-                            }
-                        }, 2500, TimeUnit.MILLISECONDS);
-                    }
-                }));
+        return Observable.create(emitter -> {
+            if (reference.incrementAndGet() == 1) {
+                instance.updateRequest();
             }
+            final Disposable disposable = subject.subscribeWith(new DisposableObserver<GeoData>() {
+                @Override
+                public void onNext(final GeoData value) {
+                    emitter.onNext(value);
+                }
+
+                @Override
+                public void onError(final Throwable e) {
+                    emitter.onError(e);
+                }
+
+                @Override
+                public void onComplete() {
+                    emitter.onComplete();
+                }
+            });
+            emitter.setDisposable(Disposable.fromRunnable(() -> {
+                disposable.dispose();
+                AndroidRxUtils.looperCallbacksScheduler.scheduleDirect(() -> {
+                    if (reference.decrementAndGet() == 0) {
+                        instance.updateRequest();
+                    }
+                }, 2500, TimeUnit.MILLISECONDS);
+            }));
         });
     }
 
@@ -124,12 +112,7 @@ public class LocationProvider extends LocationCallback implements GoogleApiClien
         // no less precise than 20 meters.
         final Observable<GeoData> untilPreciseEnoughObservable =
                 lowPowerObservable.mergeWith(highPowerObservable.delaySubscription(6, TimeUnit.SECONDS))
-                        .takeUntil(new Predicate<GeoData>() {
-                            @Override
-                            public boolean test(final GeoData geoData) {
-                                return geoData.getAccuracy() <= 20;
-                            }
-                        });
+                        .takeUntil(geoData -> geoData.getAccuracy() <= 20);
 
         // After sending the last known location, try to get a precise location then use the low-power mode. If no
         // location information is given for 25 seconds (if the network location is turned off for example), get

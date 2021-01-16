@@ -5,8 +5,9 @@ import cgeo.geocaching.R;
 import cgeo.geocaching.filter.SizeFilter.Factory;
 
 import android.content.res.Resources;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,6 +38,7 @@ public class FilterRegistry {
         }
 
         @Override
+        @NonNull
         public String toString() {
             return name;
         }
@@ -59,11 +61,14 @@ public class FilterRegistry {
         register(R.string.cache_difficulty, DifficultyFilter.Factory.class);
         register(R.string.cache_attributes, AttributeFilter.Factory.class);
         register(R.string.cache_status, StateFilterFactory.class);
+        register(R.string.cache_stored, StoredFilterFactory.class);
         register(R.string.caches_filter_origin, OriginFilter.Factory.class);
         register(R.string.caches_filter_distance, DistanceFilter.Factory.class);
         register(R.string.caches_filter_popularity, PopularityFilter.Factory.class);
         register(R.string.caches_filter_popularity_ratio, PopularityRatioFilter.Factory.class);
         register(R.string.caches_filter_personal_data, PersonalDataFilterFactory.class);
+        register(R.string.caches_filter_lists, ListFilterFactory.class);
+        register(R.string.cache_location_country, CountryFilterFactory.class);
     }
 
     public List<FactoryEntry> getFactories() {

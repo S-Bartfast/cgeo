@@ -2,19 +2,18 @@ package cgeo.geocaching.maps.mapsforge.v6.caches;
 
 import cgeo.geocaching.SearchResult;
 import cgeo.geocaching.connector.ConnectorFactory;
-import cgeo.geocaching.connector.gc.GCLogin;
-import cgeo.geocaching.connector.gc.MapTokens;
 import cgeo.geocaching.enumerations.LoadFlags;
 import cgeo.geocaching.enumerations.LoadFlags.RemoveFlag;
 import cgeo.geocaching.location.Viewport;
+import cgeo.geocaching.maps.MapUtils;
 import cgeo.geocaching.maps.mapsforge.v6.MapHandlers;
-import cgeo.geocaching.maps.mapsforge.v6.MfMapView;
+import cgeo.geocaching.maps.mapsforge.v6.NewMap;
 import cgeo.geocaching.models.Geocache;
-import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.utils.Log;
+import static cgeo.geocaching.location.Viewport.containingGCliveCaches;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.lang.ref.WeakReference;
 import java.util.EnumSet;
@@ -22,20 +21,20 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
-import org.apache.commons.lang3.StringUtils;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.mapsforge.map.layer.Layer;
 
 public class LiveCachesOverlay extends AbstractCachesOverlay {
 
     private final Disposable timer;
     private boolean downloading = false;
-    public long loadThreadRun = -1;
-    private MapTokens tokens;
 
-    public LiveCachesOverlay(final int overlayId, final Set<GeoEntry> geoEntries, final MfMapView mapView, final Layer anchorLayer, final MapHandlers mapHandlers) {
-        super(overlayId, geoEntries, mapView, anchorLayer, mapHandlers);
+    private SearchResult lastSearchResult = null;
+    private Viewport lastViewport = null;
+
+    public LiveCachesOverlay(final NewMap map, final int overlayId, final Set<GeoEntry> geoEntries, final CachesBundle bundle, final Layer anchorLayer, final MapHandlers mapHandlers) {
+        super(map, overlayId, geoEntries, bundle, anchorLayer, mapHandlers);
 
         this.timer = startTimer();
     }
@@ -46,9 +45,12 @@ public class LiveCachesOverlay extends AbstractCachesOverlay {
 
     private static final class LoadTimerAction implements Runnable {
 
-        @NonNull private final WeakReference<LiveCachesOverlay> overlayRef;
+        @NonNull
+        private final WeakReference<LiveCachesOverlay> overlayRef;
         private int previousZoom = -100;
-        private Viewport previousViewport;
+        private Viewport previousCycleViewport; //viewport on last timer cycle
+        private Viewport previousMoveViewport; //viewport on last move
+        private long lastMovedTimestamp = -1;
 
         LoadTimerAction(@NonNull final LiveCachesOverlay overlay) {
             this.overlayRef = new WeakReference<>(overlay);
@@ -69,20 +71,24 @@ public class LiveCachesOverlay extends AbstractCachesOverlay {
 
                 // check if map moved or zoomed
                 //TODO Portree Use Rectangle inside with bigger search window. That will stop reloading on every move
-                final boolean moved = overlay.isInvalidated() || previousViewport == null || zoomNow != previousZoom ||
-                        mapMoved(previousViewport, viewportNow) || !previousViewport.includes(viewportNow);
+                final boolean moved = overlay.isInvalidated() || previousCycleViewport == null || zoomNow != previousZoom ||
+                        previousMoveViewport == null || mapMoved(previousMoveViewport, viewportNow);
 
                 // save new values
                 if (moved) {
                     final long currentTime = System.currentTimeMillis();
 
-                    if (1000 < (currentTime - overlay.loadThreadRun)) {
+                    if (1000 < (currentTime - lastMovedTimestamp)) {
                         overlay.downloading = true;
                         previousZoom = zoomNow;
-                        previousViewport = viewportNow;
                         overlay.download();
+                        previousMoveViewport = viewportNow;
+                        lastMovedTimestamp = System.currentTimeMillis();
                     }
+                } else if (!previousCycleViewport.equals(viewportNow)) {
+                    overlay.updateTitle();
                 }
+                previousCycleViewport = viewportNow;
             } catch (final Exception e) {
                 Log.w("LiveCachesOverlay.startLoadtimer.start", e);
             } finally {
@@ -96,21 +102,12 @@ public class LiveCachesOverlay extends AbstractCachesOverlay {
         try {
             showProgress();
 
-            if (Settings.isGCConnectorActive() && tokens == null) {
-                tokens = GCLogin.getInstance().getMapTokens();
-                if (StringUtils.isEmpty(tokens.getUserSession()) || StringUtils.isEmpty(tokens.getSessionToken())) {
-                    tokens = null;
-                    //TODO: show missing map token toast
-                    //                    if (!noMapTokenShowed) {
-                    //                        ActivityMixin.showToast(activity, res.getString(R.string.map_token_err));
-                    //                        noMapTokenShowed = true;
-                    //                    }
-                }
-            }
-            final SearchResult searchResult = ConnectorFactory.searchByViewport(getViewport().resize(1.2), tokens);
+            final boolean useLastSearchResult = null != lastSearchResult && null != lastViewport && lastViewport.includes(getViewport());
+            final Viewport newViewport = getViewport().resize(3.0);
+            final SearchResult searchResult = useLastSearchResult ? lastSearchResult : ConnectorFactory.searchByViewport(newViewport);
 
             final Set<Geocache> result = searchResult.getCachesFromSearchResult(LoadFlags.LOAD_CACHE_OR_DB);
-            AbstractCachesOverlay.filter(result);
+            MapUtils.filter(result);
             // update the caches
             // first remove filtered out
             final Set<String> filteredCodes = searchResult.getFilteredGeocodes();
@@ -120,7 +117,13 @@ public class LiveCachesOverlay extends AbstractCachesOverlay {
             Log.d(String.format(Locale.ENGLISH, "Live caches found: %d", result.size()));
 
             //render
-            fill(result);
+            update(result);
+
+            lastSearchResult = searchResult;
+            if (null == lastViewport || !useLastSearchResult || (!result.isEmpty() && lastSearchResult.getCount() > 400)) {
+                lastViewport = containingGCliveCaches(result);
+            }
+            Log.d("searchByViewport: cached=" + useLastSearchResult + ", results=" + lastSearchResult.getCount() + ", viewport=" + lastViewport);
 
         } finally {
             hideProgress();

@@ -21,11 +21,12 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.regex.Pattern;
 
@@ -63,6 +64,8 @@ public abstract class OAuthAuthorizationActivity extends AbstractActivity {
     @BindView(R.id.auth_2) protected TextView auth2;
     private ProgressDialog requestTokenDialog = null;
     private ProgressDialog changeTokensDialog = null;
+
+    private String lastVerifier = null;
 
     private final Handler requestTokenHandler = new RequestTokenHandler(this);
     private final Handler changeTokensHandler = new ChangeTokensHandler(this);
@@ -172,6 +175,7 @@ public abstract class OAuthAuthorizationActivity extends AbstractActivity {
 
     @Override
     public void onNewIntent(final Intent intent) {
+        super.onNewIntent(intent);   // call super to make lint happy
         setIntent(intent);
     }
 
@@ -179,15 +183,24 @@ public abstract class OAuthAuthorizationActivity extends AbstractActivity {
     public void onResume() {
         super.onResume();
         final Uri uri = getIntent().getData();
-        if (uri != null) {
-            final String verifier = uri.getQueryParameter("oauth_verifier");
-            if (StringUtils.isNotBlank(verifier)) {
-                exchangeTokens(verifier);
-            } else {
-                // We can shortcut the whole verification process if we do not have a token at all.
-                changeTokensHandler.sendEmptyMessage(NOT_AUTHENTICATED);
-            }
+        if (uri == null) {
+            return;
         }
+
+        final String verifier = uri.getQueryParameter("oauth_verifier");
+
+        if (StringUtils.isBlank(verifier)) {
+            // We can shortcut the whole verification process if we do not have a token at all.
+            changeTokensHandler.sendEmptyMessage(NOT_AUTHENTICATED);
+            return;
+        }
+
+        if (verifier.equals(lastVerifier)) {
+            return;
+        }
+
+        lastVerifier = verifier;
+        exchangeTokens(verifier);
     }
 
     private void requestToken() {
@@ -305,12 +318,7 @@ public abstract class OAuthAuthorizationActivity extends AbstractActivity {
                 startButton.setOnClickListener(null);
 
                 actitity.setTempTokens(null, null);
-                AndroidRxUtils.networkScheduler.scheduleDirect(new Runnable() {
-                    @Override
-                    public void run() {
-                        actitity.requestToken();
-                    }
-                });
+                AndroidRxUtils.networkScheduler.scheduleDirect(actitity::requestToken);
             }
         }
     }
@@ -337,12 +345,7 @@ public abstract class OAuthAuthorizationActivity extends AbstractActivity {
         }
         changeTokensDialog.show();
 
-        AndroidRxUtils.networkScheduler.scheduleDirect(new Runnable() {
-            @Override
-            public void run() {
-                changeToken(verifier);
-            }
-        });
+        AndroidRxUtils.networkScheduler.scheduleDirect(() -> changeToken(verifier));
     }
 
     @NonNull

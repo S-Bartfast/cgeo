@@ -8,7 +8,6 @@
     <include layout="@layout/dialog_title_ok_cancel" />
 
     <ScrollView
-        xmlns:android="http://schemas.android.com/apk/res/android"
         android:id="@+id/scroller"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -18,8 +17,8 @@
             android:id="@+id/scroller_child"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" >
-
+            android:orientation="vertical"
+            android:importantForAutofill="noExcludeDescendants">
             <include layout="@layout/coordinates_calculate" />
             <include layout="@layout/coordinates_equations" />
 
@@ -34,8 +33,7 @@
                 android:clickable="false"
 
                 android:gravity="right"
-                android:textAlignment="gravity"
-                android:text="N DDD° MM.PPP"/>
+                android:textAlignment="gravity"/>
 
             <TextView
                 android:id="@+id/lonRes"
@@ -49,20 +47,19 @@
 
                 android:paddingRight="16dp"
                 android:gravity="end"
-                android:textAlignment="gravity"
-                android:text="E DDD° MM.PPP"/>
+                android:textAlignment="gravity"/>
 
             <EditText
                 android:id="@+id/notes_text"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 style="@style/edittext_full"
-                android:textSize="16dp"
+                android:textSize="16sp"
                 android:singleLine="false"
                 android:overScrollMode="always"
                 android:scrollbarStyle="insideInset"
                 android:scrollbars="vertical"
-
+                android:inputType="textMultiLine|textCapSentences"
                 android:hint="@string/waypointcalc_notes_prompt" />
 
             <Button

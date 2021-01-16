@@ -1,16 +1,29 @@
 package cgeo.geocaching.maps;
 
 import cgeo.geocaching.R;
+import cgeo.geocaching.activity.ActivityMixin;
+import cgeo.geocaching.enumerations.LoadFlags;
+import cgeo.geocaching.location.Geopoint;
+import cgeo.geocaching.maps.interfaces.CachesOverlayItemImpl;
 import cgeo.geocaching.maps.interfaces.MapActivityImpl;
+import cgeo.geocaching.maps.interfaces.MapViewImpl;
+import cgeo.geocaching.maps.interfaces.PositionAndHistory;
+import cgeo.geocaching.maps.mapsforge.v6.TargetView;
 import cgeo.geocaching.maps.routing.Routing;
+import cgeo.geocaching.models.Geocache;
+import cgeo.geocaching.models.Route;
+import cgeo.geocaching.storage.DataStore;
 
 import android.app.Activity;
 import android.content.res.Resources;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.Window;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * Base class for the map activity. Delegates base class calls to the
@@ -19,6 +32,12 @@ import android.view.Window;
 public abstract class AbstractMap {
 
     final MapActivityImpl mapActivity;
+    protected MapViewImpl<CachesOverlayItemImpl> mapView;
+
+    protected PositionAndHistory overlayPositionAndScale;
+    public String targetGeocode = null;
+    public Geopoint lastNavTarget = null;
+    public TargetView targetView;
 
     protected AbstractMap(final MapActivityImpl activity) {
         mapActivity = activity;
@@ -34,15 +53,15 @@ public abstract class AbstractMap {
 
     public void onCreate(final Bundle savedInstanceState) {
         mapActivity.superOnCreate(savedInstanceState);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1) {
-            mapActivity.getActivity().requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
-        }
-
         Routing.connect();
     }
 
     public void onResume() {
         mapActivity.superOnResume();
+    }
+
+    public void onStart() {
+        mapActivity.superOnStart();
     }
 
     public void onStop() {
@@ -58,20 +77,53 @@ public abstract class AbstractMap {
         Routing.disconnect();
     }
 
-    public boolean onCreateOptionsMenu(final Menu menu) {
+    public boolean onCreateOptionsMenu(@NonNull final Menu menu) {
         final boolean result = mapActivity.superOnCreateOptionsMenu(menu);
         mapActivity.getActivity().getMenuInflater().inflate(R.menu.map_activity, menu);
         return result;
     }
 
-    public boolean onPrepareOptionsMenu(final Menu menu) {
+    public boolean onPrepareOptionsMenu(@NonNull final Menu menu) {
         return mapActivity.superOnPrepareOptionsMenu(menu);
     }
 
-    public boolean onOptionsItemSelected(final MenuItem item) {
+    public boolean onOptionsItemSelected(@NonNull final MenuItem item) {
         return mapActivity.superOnOptionsItemSelected(item);
     }
 
-    public abstract void onSaveInstanceState(final Bundle outState);
+    public abstract void onSaveInstanceState(@NonNull Bundle outState);
+
+    public abstract void onLowMemory();
+
+    public void setTracks(final Route tracks) {
+        //
+    }
+
+    public void reloadIndividualRoute() {
+        //
+    }
+
+    @Nullable
+    public Geocache getCurrentTargetCache() {
+        if (StringUtils.isNotBlank(targetGeocode)) {
+            return DataStore.loadCache(targetGeocode, LoadFlags.LOAD_CACHE_OR_DB);
+        }
+        return null;
+    }
+
+    public void setTarget(final Geopoint coords, final String geocode) {
+        lastNavTarget = coords;
+        mapView.setDestinationCoords(coords);
+        mapView.setCoordinates(overlayPositionAndScale.getCoordinates());
+        if (StringUtils.isNotBlank(geocode)) {
+            targetGeocode = geocode;
+            final Geocache target = getCurrentTargetCache();
+            targetView.setTarget(targetGeocode, target != null ? target.getName() : StringUtils.EMPTY);
+        } else {
+            targetGeocode = null;
+            targetView.setTarget(null, null);
+        }
+        ActivityMixin.invalidateOptionsMenu(getActivity());
+    }
 
 }

@@ -5,7 +5,8 @@ import cgeo.geocaching.models.Geocache;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import java.util.Collections;
 import java.util.List;
@@ -46,6 +47,6 @@ public class PersonalNoteFilter extends AbstractFilter implements IFilterFactory
     @Override
     @NonNull
     public List<IFilter> getFilters() {
-        return Collections.<IFilter> singletonList(this);
+        return Collections.singletonList(this);
     }
 }

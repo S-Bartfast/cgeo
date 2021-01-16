@@ -1,10 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <!-- changelog for the master branch -->
-  <string name="changelog_master" translatable="false">
-    <b>Next feature release:</b>\n
-     · [placeholder]
-     \n
-     \n
+  <string name="changelog_master" translatable="false"><Data><![CDATA[<div>
+<h1>Nightly build:</h1>
+
+<h4>Map:</h4>
+<ul>
+<li>Change: Use squared c:geo logo for user-defined caches</li>
+<li>New: Update checker for downloaded offline maps (will work only for new downloads)</li>
+<li>New: Color of location accuracy circle is configurable now</li>
+</ul>
+
+<h4>Cache details:</h4>
+<ul>
+<li>New: Allow edit of description for user-defined caches</li>
+<li>Change: New user-defined waypoints will get shorter names</li>
+<li>Change: Numbering of new user-defined waypoints will use a cache-wide number (instead of per-type numbering) and will include waypoints of type trailhead</li>
+</ul>
+
+<h4>Custom symbols:</h4>
+<ul>
+<li>New: Custom symbol selector offering several emojis and geometric figures</li>
+<li>New / change: Custom symbols can be used for cache icons (large) and/or list markers (small)</li>
+<li>Assign cache markers from cache detail menu or from Cache list ➜ Manage caches ➜ Set cache icons</li>
+<li>Assign list markers the same way as today, using Cache list ➜ Manage lists ➜ Set list marker</li>
+</ul>
+
+<h4>Other:</h4>
+<ul>
+<li>Change: Unified export dialogs. \"Share\" option can be selected after export now.</li>
+<li>Change: Existing cache logs are kept/merged on importing GPX file / pocket query</li>
+<li>Fix: Allow sorting when in selection mode</li>
+<li>New: Installation wizard (starting automatically on a fresh install)</li>
+</ul>
+
+</div>]]>
+  </Data>
   </string>
 </resources>

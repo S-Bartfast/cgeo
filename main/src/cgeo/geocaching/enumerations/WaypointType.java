@@ -3,7 +3,9 @@ package cgeo.geocaching.enumerations;
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.R;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,30 +23,43 @@ import org.apache.commons.lang3.StringUtils;
  * Enum listing waypoint types
  */
 public enum WaypointType {
-    FINAL("flag", "Final Location", R.string.wp_final, R.drawable.waypoint_flag, 3),
-    OWN("own", "Own", R.string.wp_waypoint, R.drawable.waypoint_waypoint, 5),
-    PARKING("pkg", "Parking Area", R.string.wp_pkg, R.drawable.waypoint_pkg, -1),
-    PUZZLE("puzzle", "Virtual Stage", R.string.wp_puzzle, R.drawable.waypoint_puzzle, 2),
-    STAGE("stage", "Physical Stage", R.string.wp_stage, R.drawable.waypoint_stage, 2),
-    TRAILHEAD("trailhead", "Trailhead", R.string.wp_trailhead, R.drawable.waypoint_trailhead, 1),
-    WAYPOINT("waypoint", "Reference Point", R.string.wp_waypoint, R.drawable.waypoint_waypoint, 2),
-    ORIGINAL("original", "Original Coordinates", R.string.wp_original, R.drawable.waypoint_waypoint, 4);
+    FINAL("flag", "f", "Final Location", R.string.wp_final, R.string.wpnew_final, R.drawable.waypoint_flag, 3, R.drawable.dot_waypoint_flag),
+    OWN("own", "o", "Own", R.string.wp_waypoint, R.string.wpnew_waypoint, R.drawable.waypoint_waypoint, 5, R.drawable.dot_waypoint),
+    PARKING("pkg", "p", "Parking Area", R.string.wp_pkg, R.string.wpnew_pkg, R.drawable.waypoint_pkg, -1, R.drawable.dot_waypoint_pkg),
+    PUZZLE("puzzle", "x", "Virtual Stage", R.string.wp_puzzle, R.string.wpnew_stage, R.drawable.waypoint_puzzle, 2, R.drawable.dot_waypoint),
+    STAGE("stage", "s", "Physical Stage", R.string.wp_stage, R.string.wpnew_stage, R.drawable.waypoint_stage, 2, R.drawable.dot_waypoint),
+    TRAILHEAD("trailhead", "t", "Trailhead", R.string.wp_trailhead, R.string.wpnew_trailhead, R.drawable.waypoint_trailhead, 1, R.drawable.dot_waypoint),
+    WAYPOINT("waypoint", "w", "Reference Point", R.string.wp_waypoint, R.string.wpnew_waypoint, R.drawable.waypoint_waypoint, 2, R.drawable.dot_waypoint_reference),
+    ORIGINAL("original", "h", "Original Coordinates", R.string.wp_original, R.string.wpnew_original, R.drawable.waypoint_waypoint, 4, R.drawable.dot_waypoint_reference);
+
+    @NonNull
+    public static final List<WaypointType> ALL_TYPES = orderedWaypointTypes(false);
+    @NonNull
+    public static final List<WaypointType> ALL_TYPES_EXCEPT_OWN_AND_ORIGINAL = orderedWaypointTypes(true);
 
     @NonNull
     public final String id;
 
-    @NonNull public final String gpx;
-    public final int stringId;
+    public final String shortId;        // for personal notes
+
+    @NonNull
+    public final String gpx;
+    public final int stringId;          // regular type identifier
+    public final int stringIdNewWpt;    // default name for new waypoints
     public final int markerId;
 
     public final int order;
+    public final int dotMarkerId;
 
-    WaypointType(@NonNull final String id, @NonNull final String gpx, final int stringId, final int markerId, final int order) {
+    WaypointType(@NonNull final String id, @NonNull final String shortId, @NonNull final String gpx, @StringRes final int stringId, @StringRes final int stringIdNewWpt, @DrawableRes final int markerId, final int order, @DrawableRes final int dotMarkerId) {
         this.id = id;
+        this.shortId = shortId;
         this.gpx = gpx;
         this.stringId = stringId;
+        this.stringIdNewWpt = stringIdNewWpt;
         this.markerId = markerId;
         this.order = order;
+        this.dotMarkerId = dotMarkerId;
     }
 
     /**
@@ -52,20 +67,23 @@ public enum WaypointType {
      * non public so that {@code null} handling can be handled centrally in the enum type itself
      */
     private static final Map<String, WaypointType> FIND_BY_ID = new HashMap<>();
+
     static {
         for (final WaypointType wt : values()) {
             FIND_BY_ID.put(wt.id, wt);
         }
     }
-    @NonNull
-    public static final List<WaypointType> ALL_TYPES_EXCEPT_OWN_AND_ORIGINAL = orderedWaypointTypes();
 
-    private static List<WaypointType> orderedWaypointTypes() {
+    private static List<WaypointType> orderedWaypointTypes(final boolean excludeInternalTypes) {
         // enforce an order for these types
         final Set<WaypointType> waypointTypes = new LinkedHashSet<>();
         waypointTypes.addAll(Arrays.asList(PARKING, TRAILHEAD, PUZZLE, STAGE, FINAL));
         // then add all remaining except "internal" types
         waypointTypes.addAll(EnumSet.complementOf(EnumSet.of(OWN, ORIGINAL)));
+        if (!excludeInternalTypes) {
+            //if wanted, add internal types at the end
+            waypointTypes.addAll(EnumSet.of(OWN, ORIGINAL));
+        }
         return Collections.unmodifiableList(new ArrayList<>(waypointTypes));
     }
 
@@ -87,7 +105,25 @@ public enum WaypointType {
 
     @NonNull
     public final String getL10n() {
+        //enable local unit testing
+        if (CgeoApplication.getInstance() == null) {
+            return name();
+        }
         return CgeoApplication.getInstance().getBaseContext().getString(stringId);
+    }
+
+    @NonNull
+    public final String getNameForNewWaypoint() {
+        //enable local unit testing
+        if (CgeoApplication.getInstance() == null) {
+            return name();
+        }
+        return CgeoApplication.getInstance().getBaseContext().getString(stringIdNewWpt);
+    }
+
+    @NonNull
+    public final String getShortId() {
+        return shortId;
     }
 
     @Override
@@ -100,9 +136,18 @@ public enum WaypointType {
     }
 
     public static WaypointType fromGPXString(@NonNull final String sym) {
+        return fromGPXString(sym, null);
+    }
+
+    public static WaypointType fromGPXString(@NonNull final String sym, final String subtype) {
         // first check the somewhat "official" sym types
         for (final WaypointType waypointType : WaypointType.values()) {
             if (waypointType.gpx.equalsIgnoreCase(sym)) {
+                return waypointType;
+            }
+            // Maybe the <sym> element was used for a Garmin symbol (e.g. Opencaching GPX).
+            // Try the subtype instead if defined
+            if (waypointType.gpx.equalsIgnoreCase(subtype)) {
                 return waypointType;
             }
         }

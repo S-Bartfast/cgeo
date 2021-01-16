@@ -5,10 +5,11 @@ import cgeo.geocaching.CgeoApplication;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.StringRes;
 
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
+import androidx.annotation.StringRes;
+
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 
 /**
  * Handler with a dispose policy. Once disposed, the handler will not handle
@@ -73,7 +74,7 @@ public abstract class DisposableHandler extends Handler implements Disposable {
      * @param message
      *            the message to handle
      */
-    protected abstract void handleRegularMessage(final Message message);
+    protected abstract void handleRegularMessage(Message message);
 
     /**
      * Handle a dispose message.

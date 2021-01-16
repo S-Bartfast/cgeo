@@ -16,10 +16,11 @@ import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.TextToSpeech.Engine;
 import android.speech.tts.TextToSpeech.OnInitListener;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
-import io.reactivex.disposables.CompositeDisposable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -191,6 +192,14 @@ public class SpeechService extends Service implements OnInitListener {
                 ActivityMixin.showShortToast(activity, activity.getString(R.string.tts_stopped));
             }
             startingActivity = null;
+        }
+    }
+
+    public static void toggleService(final Activity activity, final Geopoint dstCoords) {
+        if (isRunning()) {
+            stopService(activity);
+        } else {
+            startService(activity, dstCoords);
         }
     }
 

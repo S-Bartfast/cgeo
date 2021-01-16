@@ -14,8 +14,9 @@ import cgeo.geocaching.utils.MatcherWrapper;
 import cgeo.geocaching.utils.TextUtils;
 
 import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.IOException;
 import java.text.ParseException;
@@ -24,10 +25,11 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Locale;
 
-import io.reactivex.Observable;
-import io.reactivex.Single;
-import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Function;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Single;
 import okhttp3.Response;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -37,10 +39,13 @@ import org.jsoup.nodes.Element;
 
 public class GCLogin extends AbstractLogin {
 
-    private static final String LOGIN_URI = "https://www.geocaching.com/account/login";
+    private static final String LOGIN_URI = "https://www.geocaching.com/account/signin";
     private static final String REQUEST_VERIFICATION_TOKEN = "__RequestVerificationToken";
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private class StatusException extends RuntimeException {
+    private ServerParameters serverParameters = null;
+
+    private static class StatusException extends RuntimeException {
         private static final long serialVersionUID = -597420116705938433L;
         final StatusCode statusCode;
 
@@ -49,6 +54,69 @@ public class GCLogin extends AbstractLogin {
             this.statusCode = statusCode;
         }
     }
+
+    /**
+     * <pre>
+     * var serverParameters = {
+     *   "user:info": {
+     *      "username": "gc-user-name",
+     *      "referenceCode": "PR....",
+     *      "userType": "Premium",
+     *      "isLoggedIn": true,
+     *      "dateFormat": "dd.MM.yyyy",
+     *      "unitSetName": "Metric",
+     *      "roles": [
+     *         "Public",
+     *         "Premium"
+     *         ]
+     *      },
+     *  "app:options": {
+     *       "localRegion": "en-US",
+     *       "endpoints": null,
+     *       "coordInfoUrl": "https://coord.info",
+     *       "paymentUrl": "https://payments.geocaching.com"
+     *   }
+     * };
+     * </pre>
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ServerParameters {
+        @JsonProperty("user:info")
+        UserInfo userInfo;
+        @JsonProperty("app:options")
+        AppOptions appOptions;
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        static final class UserInfo {
+            @JsonProperty("username")
+            String username;
+            @JsonProperty("referenceCode")
+            String referenceCode;
+            @JsonProperty("userType")
+            String userType;
+            @JsonProperty("isLoggedIn")
+            boolean isLoggedIn;
+            @JsonProperty("dateFormat")
+            String dateFormat;
+            @JsonProperty("unitSetName")
+            String unitSetName;
+            @JsonProperty("roles")
+            String[] roles;
+        }
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        static final class AppOptions {
+            @JsonProperty("localRegion")
+            String localRegion;
+            @JsonProperty("endpoints")
+            String endpoints;
+            @JsonProperty("coordInfoUrl")
+            String coordInfoUrl;
+            @JsonProperty("paymentUrl")
+            String paymentUrl;
+        }
+    }
+
 
     private GCLogin() {
         // singleton
@@ -76,6 +144,14 @@ public class GCLogin extends AbstractLogin {
     @Override
     @NonNull
     protected StatusCode login(final boolean retry, @NonNull final Credentials credentials) {
+        final StatusCode status = loginInternal(retry, credentials);
+        if (status != StatusCode.NO_ERROR) {
+            resetLoginStatus();
+        }
+        return status;
+    }
+
+    private StatusCode loginInternal(final boolean retry, @NonNull final Credentials credentials) {
         if (credentials.isInvalid()) {
             clearLoginInfo();
             Log.w("Login.login: No login information stored");
@@ -98,10 +174,7 @@ public class GCLogin extends AbstractLogin {
                 if (switchToEnglish(tryLoggedInData) && retry) {
                     return login(false, credentials);
                 }
-                setHomeLocation();
-                refreshMemberStatus();
-                detectGcCustomDate();
-                return StatusCode.NO_ERROR; // logged in
+                return completeLoginProcess();
             }
 
             final String requestVerificationToken = extractRequestVerificationToken(tryLoggedInData);
@@ -123,14 +196,16 @@ public class GCLogin extends AbstractLogin {
                     return login(false, credentials);
                 }
                 Log.i("Successfully logged in Geocaching.com as " + username + " (" + Settings.getGCMemberStatus() + ')');
-                setHomeLocation();
-                refreshMemberStatus();
-                detectGcCustomDate();
-                return StatusCode.NO_ERROR; // logged in
+                return completeLoginProcess();
             }
 
-            if (loginData.contains("your username or password is incorrect")) {
-                Log.i("Failed to log in Geocaching.com as " + username + " because of wrong username/password");
+            if (loginData.contains("<div class=\"g-recaptcha\" data-sitekey=\"")) {
+                Log.i("Failed to log in to geocaching.com due to captcha required");
+                return resetGcCustomDate(StatusCode.LOGIN_CAPTCHA_ERROR);
+            }
+
+            if (loginData.contains("id=\"signup-validation-error\"")) {
+                Log.i("Failed to log in to geocaching.com as " + username + " because of wrong username/password");
                 return resetGcCustomDate(StatusCode.WRONG_LOGIN_DATA); // wrong login
             }
 
@@ -188,12 +263,12 @@ public class GCLogin extends AbstractLogin {
     @Nullable
     private String extractRequestVerificationToken(final String page) {
         final Document document = Jsoup.parse(page);
-        final String value = document.select(".login > form > input[name=\"" + REQUEST_VERIFICATION_TOKEN + "\"]").attr("value");
+        final String value = document.select("form > input[name=\"" + REQUEST_VERIFICATION_TOKEN + "\"]").attr("value");
         return StringUtils.isNotEmpty(value) ? value : null;
     }
 
     private String postCredentials(final Credentials credentials, final String requestVerificationToken) {
-        final Parameters params = new Parameters("Username", credentials.getUserName(),
+        final Parameters params = new Parameters("UsernameOrEmail", credentials.getUserName(),
                 "Password", credentials.getPassword(), REQUEST_VERIFICATION_TOKEN, requestVerificationToken);
         return getResponseBodyOrStatus(Network.postRequest(LOGIN_URI, params).blockingGet());
     }
@@ -214,16 +289,13 @@ public class GCLogin extends AbstractLogin {
         }
         assert page != null;
 
-        if (TextUtils.matches(page, GCConstants.PATTERN_MAP_LOGGED_IN)) {
-            return true;
-        }
-
         setActualStatus(CgeoApplication.getInstance().getString(R.string.init_login_popup_ok));
 
         // on every page except login page
-        setActualLoginStatus(TextUtils.matches(page, GCConstants.PATTERN_LOGIN_NAME));
+        final String username = GCParser.getUsername(page);
+        setActualLoginStatus(StringUtils.isNotBlank(username));
         if (isActualLoginStatus()) {
-            setActualUserName(TextUtils.stripHtml(TextUtils.getMatch(page, GCConstants.PATTERN_LOGIN_NAME, true, "???")));
+            setActualUserName(username);
             int cachesCount = 0;
             try {
                 cachesCount = Integer.parseInt(removeDotAndComma(TextUtils.getMatch(page, GCConstants.PATTERN_CACHES_FOUND, true, "0")));
@@ -283,12 +355,8 @@ public class GCLogin extends AbstractLogin {
      */
     public String getAvatarUrl() {
         try {
-            final String responseData = StringUtils.defaultString(Network.getResponseData(Network.getRequest("https://www.geocaching.com/my/")));
-            final String profile = TextUtils.replaceWhitespace(responseData);
-
-            setActualCachesFound(Integer.parseInt(removeDotAndComma(TextUtils.getMatch(profile, GCConstants.PATTERN_CACHES_FOUND, true, "-1"))));
-
-            final String avatarURL = TextUtils.getMatch(profile, GCConstants.PATTERN_AVATAR_IMAGE_PROFILE_PAGE, false, null);
+            final String responseData = StringUtils.defaultString(Network.getResponseData(Network.getRequest("https://www.geocaching.com/play/serverparameters/params")));
+            final String avatarURL = TextUtils.getMatch(responseData, GCConstants.PATTERN_AVATAR_IMAGE_SERVERPARAMETERS, false, null);
             if (avatarURL != null) {
                 return avatarURL.replace("avatar", "user/large");
             }
@@ -325,73 +393,49 @@ public class GCLogin extends AbstractLogin {
      */
     static Single<String> retrieveHomeLocation() {
         return Network.getResponseDocument(Network.getRequest("https://www.geocaching.com/account/settings/homelocation"))
-                .map(new Function<Document, String>() {
-                    @Override
-                    public String apply(final Document document) {
-                        return document.select("input.search-coordinates").attr("value");
-                    }
+                .map(document -> {
+                    final Document innerHtml = Jsoup.parse(document.getElementById("tplSearchCoords").html());
+                    return innerHtml.select("input.search-coordinates").attr("value");
                 });
     }
 
     private static void setHomeLocation() {
-        retrieveHomeLocation().subscribe(new Consumer<String>() {
-            @Override
-            public void accept(final String homeLocationStr) throws Exception {
-                if (StringUtils.isNotBlank(homeLocationStr) && !StringUtils.equals(homeLocationStr, Settings.getHomeLocation())) {
-                    assert homeLocationStr != null;
-                    Log.i("Setting home location to " + homeLocationStr);
-                    Settings.setHomeLocation(homeLocationStr);
-                }
+        retrieveHomeLocation().subscribe(homeLocationStr -> {
+            if (StringUtils.isNotBlank(homeLocationStr) && !StringUtils.equals(homeLocationStr, Settings.getHomeLocation())) {
+                assert homeLocationStr != null;
+                Log.i("Setting home location to " + homeLocationStr);
+                Settings.setHomeLocation(homeLocationStr);
             }
-        }, new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) throws Exception {
-                Log.w("Unable to retrieve the home location");
-            }
-        });
+        }, throwable -> Log.w("Unable to retrieve the home location"));
     }
 
-    private static void refreshMemberStatus() {
-        Network.getResponseDocument(Network.getRequest("https://www.geocaching.com/account/settings/membership"))
-                .subscribe(new Consumer<Document>() {
-                               @Override
-                               public void accept(final Document document) throws Exception {
-                                   final Element membership = document.select("dl.membership-details > dd:eq(3)").first();
-                                   if (membership != null) {
-                                       final GCMemberState memberState = GCMemberState.fromString(membership.text());
-                                       Log.d("Setting member status to " + memberState);
-                                       Settings.setGCMemberStatus(memberState);
-                                   } else {
-                                       Log.w("Cannot determine member status");
-                                   }
-                               }
-                           },
-                        new Consumer<Throwable>() {
-                            @Override
-                            public void accept(final Throwable throwable) throws Exception {
-                                Log.w("Unable to retrieve member status", throwable);
-                            }
-                        });
-    }
-
-    /**
-     * Detect user date settings on geocaching.com
-     */
-    private static void detectGcCustomDate() {
-        try {
-            final Document document = Network.getResponseDocument(Network.getRequest("https://www.geocaching.com/account/settings/preferences")).blockingGet();
-            final String customDate = document.select("select#SelectedDateFormat option[selected]").attr("value");
-            if (StringUtils.isNotBlank(customDate)) {
-                Log.d("Setting GC custom date to " + customDate);
-                Settings.setGcCustomDate(customDate);
-            } else {
-                Settings.setGcCustomDate(GCConstants.DEFAULT_GC_DATE);
-                Log.w("cannot find custom date format in geocaching.com preferences page, using default");
-            }
-        } catch (final Exception e) {
-            Settings.setGcCustomDate(GCConstants.DEFAULT_GC_DATE);
-            Log.w("cannot set custom date from geocaching.com preferences page, using default", e);
+    public ServerParameters getServerParameters() {
+        if (serverParameters != null) {
+            return serverParameters;
         }
+
+        final Response response = Network.getRequest("https://www.geocaching.com/play/serverparameters/params").blockingGet();
+        try {
+            final String javascriptBody = response.body().string();
+            final String jsonBody = javascriptBody.subSequence(javascriptBody.indexOf('{'), javascriptBody.lastIndexOf(';')).toString();
+            serverParameters = MAPPER.readValue(jsonBody, ServerParameters.class);
+
+            if (StringUtils.isNotBlank(serverParameters.userInfo.dateFormat)) {
+                Log.d("Setting GCCustomDate to " + serverParameters.userInfo.dateFormat);
+                Settings.setGcCustomDate(serverParameters.userInfo.dateFormat);
+            }
+
+            final GCMemberState memberState = GCMemberState.fromString(serverParameters.userInfo.userType);
+            Log.d("Setting member status to " + memberState);
+            Settings.setGCMemberStatus(memberState);
+
+        } catch (final IOException e) {
+            Settings.setGcCustomDate(GCConstants.DEFAULT_GC_DATE);
+            Log.e("Error loading serverparameters", e);
+            return null;
+        }
+
+        return serverParameters;
     }
 
     public static Date parseGcCustomDate(final String input, final String format) throws ParseException {
@@ -553,17 +597,12 @@ public class GCLogin extends AbstractLogin {
         return !StringUtils.contains(uri, "cache_details");
     }
 
-    /**
-     * Get user session & session token from the Live Map. Needed for following requests.
-     *
-     * @return first is user session, second is session token
-     */
-    @NonNull
-    public MapTokens getMapTokens() {
-        final String data = getRequestLogged(GCConstants.URL_LIVE_MAP, null);
-        final String userSession = TextUtils.getMatch(data, GCConstants.PATTERN_USERSESSION, "");
-        final String sessionToken = TextUtils.getMatch(data, GCConstants.PATTERN_SESSIONTOKEN, "");
-        return new MapTokens(userSession, sessionToken);
+    private StatusCode completeLoginProcess() {
+        setHomeLocation();
+        getServerParameters();
+        // Force token retrieval to avoid avalanche requests
+        GCWebAPI.getAuthorizationHeader().subscribe();
+        return StatusCode.NO_ERROR; // logged in
     }
 
 }

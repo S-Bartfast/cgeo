@@ -1,6 +1,8 @@
 package cgeo.geocaching.export;
 
+import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.log.LogEntry;
+import cgeo.geocaching.log.LogType;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.utils.FileUtils;
 import cgeo.geocaching.utils.SynchronizedDateFormat;
@@ -14,7 +16,7 @@ import org.apache.commons.lang3.StringUtils;
 
 /**
  * Field Notes are simple plain text files, but poorly documented. Syntax:<br>
- * 
+ *
  * <pre>
  * GCxxxxx,yyyy-mm-ddThh:mm:ssZ,Found it,"logtext"
  * </pre>
@@ -36,6 +38,9 @@ class FieldNotes {
                 .append(",\"")
                 .append(StringUtils.replaceChars(log.log, '"', '\''))
                 .append("\"\n");
+        if (log.reportProblem.logType != LogType.UNKNOWN) {
+            add(cache, new LogEntry.Builder().setLog(CgeoApplication.getInstance().getString(log.reportProblem.textId)).setLogType(log.reportProblem.logType).setDate(log.date).build());
+        }
     }
 
     public String getContent() {

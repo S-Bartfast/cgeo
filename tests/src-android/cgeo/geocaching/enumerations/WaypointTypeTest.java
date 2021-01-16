@@ -1,8 +1,11 @@
 package cgeo.geocaching.enumerations;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import android.test.AndroidTestCase;
+
+import java.util.HashSet;
+import java.util.Set;
+
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class WaypointTypeTest extends AndroidTestCase {
 
@@ -24,6 +27,19 @@ public class WaypointTypeTest extends AndroidTestCase {
         // new names of multi and mystery stages
         assertThat(WaypointType.fromGPXString("Physical Stage")).isEqualTo(WaypointType.STAGE);
         assertThat(WaypointType.fromGPXString("Virtual Stage")).isEqualTo(WaypointType.PUZZLE);
+
+        // subtype forms
+        assertThat(WaypointType.fromGPXString("Parking Area", "Parking Area")).isEqualTo(WaypointType.PARKING);
+        assertThat(WaypointType.fromGPXString("unknown sym", "Virtual Stage")).isEqualTo(WaypointType.PUZZLE);
+    }
+
+    public static void testUniqueShortId() {
+        final Set<String> shortIds = new HashSet<>();
+        for (final WaypointType wpType : WaypointType.values()) {
+            assertThat(shortIds.contains(wpType.getShortId())).isFalse();
+            shortIds.add(wpType.shortId);
+        }
+        assertThat(shortIds.size()).isEqualTo(WaypointType.values().length);
     }
 
 }

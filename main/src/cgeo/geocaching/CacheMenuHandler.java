@@ -3,18 +3,19 @@ package cgeo.geocaching;
 import cgeo.geocaching.apps.navi.NavigationAppFactory;
 import cgeo.geocaching.apps.navi.NavigationSelectionActionProvider;
 import cgeo.geocaching.calendar.CalendarAdder;
+import cgeo.geocaching.connector.internal.InternalConnector;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.ui.AbstractUIFactory;
 
 import android.app.Activity;
-import android.support.annotation.NonNull;
-import android.support.v4.app.Fragment;
-import android.support.v4.view.MenuItemCompat;
-import android.support.v7.widget.ShareActionProvider;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+
+import androidx.annotation.NonNull;
+import androidx.core.view.MenuItemCompat;
+import androidx.fragment.app.Fragment;
 
 /**
  * Shared menu handling for all activities having menu items related to a cache. <br>
@@ -48,39 +49,31 @@ public final class CacheMenuHandler extends AbstractUIFactory {
             activity = ((Fragment) activityInterface).getActivity();
         }
 
-        switch (item.getItemId()) {
-            case R.id.menu_default_navigation:
-                activityInterface.navigateTo();
+        final int menuItem = item.getItemId();
+        if (menuItem == R.id.menu_default_navigation) {
+            activityInterface.navigateTo();
+            return true;
+        } else if (menuItem == R.id.menu_navigate) {
+            final NavigationSelectionActionProvider navigationProvider = (NavigationSelectionActionProvider) MenuItemCompat.getActionProvider(item);
+            if (navigationProvider == null) {
+                activityInterface.showNavigationMenu();
                 return true;
-            case R.id.menu_navigate:
-                final NavigationSelectionActionProvider navigationProvider = (NavigationSelectionActionProvider) MenuItemCompat.getActionProvider(item);
-                if (navigationProvider == null) {
-                    activityInterface.showNavigationMenu();
-                    return true;
-                }
-                return false;
-            case R.id.menu_caches_around:
-                activityInterface.cachesAround();
-                return true;
-            case R.id.menu_show_in_browser:
-                cache.openInBrowser(activity);
-                return true;
-            case R.id.menu_share:
-                /* If the share menu is a shareActionProvider do nothing and let the share ActionProvider do the work */
-                final ShareActionProvider shareActionProvider = (ShareActionProvider)
-                        MenuItemCompat.getActionProvider(item);
-                if (shareActionProvider == null) {
-                    cache.shareCache(activity, res);
-                    return true;
-                }
-                return false;
-            case R.id.menu_calendar:
-                CalendarAdder.addToCalendar(activity, cache);
-                return true;
-
-            default:
-                return false;
+            }
+            return false;
+        } else if (menuItem == R.id.menu_caches_around) {
+            activityInterface.cachesAround();
+            return true;
+        } else if (menuItem == R.id.menu_show_in_browser) {
+            cache.openInBrowser(activity);
+            return true;
+        } else if (menuItem == R.id.menu_share) {
+            cache.shareCache(activity, res);
+            return true;
+        } else if (menuItem == R.id.menu_calendar) {
+            CalendarAdder.addToCalendar(activity, cache);
+            return true;
         }
+        return false;
     }
 
     public static void onPrepareOptionsMenu(final Menu menu, final Geocache cache) {
@@ -90,7 +83,7 @@ public final class CacheMenuHandler extends AbstractUIFactory {
         final boolean hasCoords = cache.getCoords() != null;
         menu.findItem(R.id.menu_default_navigation).setVisible(hasCoords);
         menu.findItem(R.id.menu_navigate).setVisible(hasCoords);
-        menu.findItem(R.id.menu_delete).setVisible(cache.isOffline());
+        menu.findItem(R.id.menu_share).setVisible(!InternalConnector.getInstance().canHandle(cache.getGeocode()));
         menu.findItem(R.id.menu_caches_around).setVisible(hasCoords && cache.supportsCachesAround());
         menu.findItem(R.id.menu_calendar).setVisible(cache.canBeAddedToCalendar());
         menu.findItem(R.id.menu_log_visit).setVisible(cache.supportsLogging() && !Settings.getLogOffline());
@@ -98,13 +91,8 @@ public final class CacheMenuHandler extends AbstractUIFactory {
 
         menu.findItem(R.id.menu_default_navigation).setTitle(NavigationAppFactory.getDefaultNavigationApplication().getName());
 
-        final MenuItem shareItem = menu.findItem(R.id.menu_share);
-        final ShareActionProvider shareActionProvider = (ShareActionProvider)
-                MenuItemCompat.getActionProvider(shareItem);
-        if (shareActionProvider != null) {
-            shareActionProvider.setShareIntent(cache.getShareIntent());
-        }
-
+        // some connectors don't support URL - we don't need "open in browser" for those caches
+        menu.findItem(R.id.menu_show_in_browser).setVisible(cache.getUrl() != null);
     }
 
     public static void addMenuItems(final MenuInflater inflater, final Menu menu, final Geocache cache) {

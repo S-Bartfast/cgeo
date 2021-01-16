@@ -1,18 +1,13 @@
 package cgeo.geocaching.settings;
 
-import butterknife.ButterKnife;
-
 import cgeo.geocaching.R;
 import cgeo.geocaching.activity.ActivityMixin;
 import cgeo.geocaching.log.LogTemplateProvider;
 import cgeo.geocaching.log.LogTemplateProvider.LogTemplate;
 import cgeo.geocaching.ui.dialog.Dialogs;
 
-import org.apache.commons.lang3.StringUtils;
-
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.res.TypedArray;
 import android.preference.DialogPreference;
 import android.util.AttributeSet;
@@ -21,6 +16,8 @@ import android.widget.Button;
 import android.widget.EditText;
 
 import java.util.List;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class TemplateTextPreference extends DialogPreference {
 
@@ -50,32 +47,25 @@ public class TemplateTextPreference extends DialogPreference {
     protected void onBindDialogView(final View view) {
         settingsActivity = (SettingsActivity) this.getContext();
 
-        editText = ButterKnife.findById(view, R.id.signature_dialog_text);
+        editText = view.findViewById(R.id.signature_dialog_text);
         editText.setText(getPersistedString(initialValue != null ? initialValue : StringUtils.EMPTY));
         Dialogs.moveCursorToEnd(editText);
 
-        final Button button = ButterKnife.findById(view, R.id.signature_templates);
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(final View button) {
-                final AlertDialog.Builder alert = new AlertDialog.Builder(TemplateTextPreference.this.getContext());
-                alert.setTitle(R.string.init_signature_template_button);
-                final List<LogTemplate> templates = LogTemplateProvider.getTemplatesWithoutSignature();
-                final String[] items = new String[templates.size()];
-                for (int i = 0; i < templates.size(); i++) {
-                    items[i] = settingsActivity.getString(templates.get(i).getResourceId());
-                }
-                alert.setItems(items, new DialogInterface.OnClickListener() {
-
-                    @Override
-                    public void onClick(final DialogInterface dialog, final int position) {
-                        dialog.dismiss();
-                        final LogTemplate template = templates.get(position);
-                        insertSignatureTemplate(template);
-                    }
-                });
-                alert.create().show();
+        final Button button = view.findViewById(R.id.signature_templates);
+        button.setOnClickListener(button1 -> {
+            final AlertDialog.Builder alert = Dialogs.newBuilder(TemplateTextPreference.this.getContext());
+            alert.setTitle(R.string.init_signature_template_button);
+            final List<LogTemplate> templates = LogTemplateProvider.getTemplatesWithoutSignature();
+            final String[] items = new String[templates.size()];
+            for (int i = 0; i < templates.size(); i++) {
+                items[i] = settingsActivity.getString(templates.get(i).getResourceId());
             }
+            alert.setItems(items, (dialog, position) -> {
+                dialog.dismiss();
+                final LogTemplate template = templates.get(position);
+                insertSignatureTemplate(template);
+            });
+            alert.create().show();
         });
 
         super.onBindDialogView(view);

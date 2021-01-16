@@ -2,12 +2,14 @@ package cgeo.geocaching.utils;
 
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.R;
+import cgeo.geocaching.storage.LocalStorage;
 
 import android.os.Handler;
 import android.os.Message;
 import android.os.StatFs;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -19,13 +21,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 import okhttp3.Response;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.CharEncoding;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -37,8 +39,17 @@ public final class FileUtils {
     public static final String HEADER_LAST_MODIFIED = "last-modified";
     public static final String HEADER_ETAG = "etag";
 
+    public static final String GPX_FILE_EXTENSION = ".gpx";
+    public static final String LOC_FILE_EXTENSION = ".loc";
+    public static final String ZIP_FILE_EXTENSION = ".zip";
+    public static final String COMPRESSED_GPX_FILE_EXTENSION = ".ggz";
+    public static final String MAP_FILE_EXTENSION = ".map";
+
     private static final int MAX_DIRECTORY_SCAN_DEPTH = 30;
     private static final String FILE_PROTOCOL = "file://";
+
+    private static final String FORBIDDEN_FILENAME_CHARS_HEX = new String(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x7f });
+    public static final String FORBIDDEN_FILENAME_CHARS = "\"*/:<>?\\|" + FORBIDDEN_FILENAME_CHARS_HEX;
 
     private FileUtils() {
         // utility class
@@ -169,6 +180,19 @@ public final class FileUtils {
     }
 
     /**
+     * Get the guessed filename from a path
+     *
+     * @param path
+     *          filename, optionally including path
+     * @return the filename without path
+     */
+    @NonNull
+    public static String getFilenameFromPath(@NonNull final String path) {
+        final int posSegment = path.lastIndexOf('/');
+        return (posSegment >= 0) ? path.substring(posSegment + 1) : path;
+    }
+
+    /**
      * Copy a file into another. The directory structure of target file will be created if needed.
      *
      * @param source
@@ -200,12 +224,7 @@ public final class FileUtils {
      *            The filename prefix
      */
     public static void deleteFilesWithPrefix(@NonNull final File directory, @NonNull final String prefix) {
-        final FilenameFilter filter = new FilenameFilter() {
-            @Override
-            public boolean accept(final File dir, @NonNull final String filename) {
-                return filename.startsWith(prefix);
-            }
-        };
+        final FilenameFilter filter = (dir, filename) -> filename.startsWith(prefix);
         final File[] filesToDelete = directory.listFiles(filter);
         if (filesToDelete == null) {
             return;
@@ -293,13 +312,7 @@ public final class FileUtils {
         if (header == null) {
             deleteIgnoringFailure(file);
         } else {
-            try {
-                saveToFile(new ByteArrayInputStream(header.getBytes("UTF-8")), file);
-            } catch (final UnsupportedEncodingException e) {
-                // Do not try to display the header in the log message, as our default encoding is
-                // likely to be UTF-8 and it will fail as well.
-                Log.e("FileUtils.saveHeader: unable to decode header", e);
-            }
+            saveToFile(new ByteArrayInputStream(header.getBytes(StandardCharsets.UTF_8)), file);
         }
     }
 
@@ -321,7 +334,7 @@ public final class FileUtils {
     public static String getSavedHeader(@NonNull final File baseFile, final String name) {
         try {
             final File file = filenameForHeader(baseFile, name);
-            final Reader reader = new InputStreamReader(new FileInputStream(file), CharEncoding.UTF_8);
+            final Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
             try {
                 // No header will be more than 256 bytes
                 final char[] value = new char[256];
@@ -372,6 +385,16 @@ public final class FileUtils {
     }
 
     /**
+     * Creates a uniquely named file in the "logfiles" dir with prefix/suffix as given
+     */
+    @NonNull
+    public static File getUniqueNamedLogfile(final String prefix, final String suffix) {
+        final File logfilesDirectory = LocalStorage.getLogfilesDirectory();
+        mkdirs(logfilesDirectory);
+        return getUniqueNamedFile(new File(logfilesDirectory, prefix + "_" + CalendarUtils.formatDateTime("yyyy-MM-dd_HH-mm") + "." + suffix));
+    }
+
+    /**
      * This usage of this method indicates that the return value of File.delete() can safely be ignored.
      */
     public static void deleteIgnoringFailure(final File file) {
@@ -410,7 +433,7 @@ public final class FileUtils {
 
     public static boolean writeFileUTF16(final File file, final String content) {
         try {
-            org.apache.commons.io.FileUtils.write(file, content, CharEncoding.UTF_16);
+            org.apache.commons.io.FileUtils.write(file, content, StandardCharsets.UTF_16LE);
         } catch (final IOException e) {
             Log.e("FileUtils.writeFileUTF16", e);
             return false;
@@ -471,18 +494,37 @@ public final class FileUtils {
     /**
      * Returns the available space in bytes on the mount point used by the given dir.
      */
-    @SuppressWarnings("deprecation")
     public static long getFreeDiskSpace(final File dir) {
         if (dir == null) {
             return 0;
         }
         try {
             final StatFs statFs = new StatFs(dir.getAbsolutePath());
-            return (long) statFs.getAvailableBlocks() * (long) statFs.getBlockSize();
+            return statFs.getAvailableBlocksLong() * statFs.getBlockSizeLong();
         } catch (final IllegalArgumentException ignored) {
             // thrown if the directory isn't pointing to an external storage
         }
         return 0;
+    }
+
+    /**
+     * searches a given directory for readable files ending with a certain string
+     * @param dir - directory to look in
+     * @param extension - extension to be searched for
+     * @return List of found files, may be empty
+     */
+    @NonNull
+    public static List<File> listFiles(final String dir, final String extension) {
+        final List<File> result = new ArrayList<>();
+        final File[] files = new File(dir).listFiles();
+        if (files != null && files.length > 0) {
+            for (File file : files) {
+                if (file.isFile() && file.getPath().endsWith(extension) && file.canRead()) {
+                    result.add(file);
+                }
+            }
+        }
+        return result;
     }
 
 }

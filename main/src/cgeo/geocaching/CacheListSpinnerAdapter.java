@@ -8,7 +8,7 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
-import butterknife.ButterKnife;
+import androidx.annotation.NonNull;
 
 class CacheListSpinnerAdapter extends ArrayAdapter<AbstractList> {
 
@@ -26,13 +26,13 @@ class CacheListSpinnerAdapter extends ArrayAdapter<AbstractList> {
 
 
     @Override
-    public View getView(final int position, final View convertView, final ViewGroup parent) {
+    public View getView(final int position, final View convertView, @NonNull final ViewGroup parent) {
         return getCustomView(position, convertView, parent);
     }
 
 
     @Override
-    public View getDropDownView(final int position, final View convertView, final ViewGroup parent) {
+    public View getDropDownView(final int position, final View convertView, @NonNull final ViewGroup parent) {
         return getCustomView(position, convertView, parent);
     }
 
@@ -45,8 +45,8 @@ class CacheListSpinnerAdapter extends ArrayAdapter<AbstractList> {
         if (resultView == null) {
             resultView = inflater.inflate(R.layout.cachelist_spinneritem, parent, false);
             holder = new ViewHolder();
-            holder.title = ButterKnife.findById(resultView, android.R.id.text1);
-            holder.subtitle = ButterKnife.findById(resultView, android.R.id.text2);
+            holder.title = resultView.findViewById(android.R.id.text1);
+            holder.subtitle = resultView.findViewById(android.R.id.text2);
 
             resultView.setTag(holder);
         } else {

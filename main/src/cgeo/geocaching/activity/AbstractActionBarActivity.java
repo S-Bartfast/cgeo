@@ -1,8 +1,10 @@
 package cgeo.geocaching.activity;
 
 import android.os.Bundle;
-import android.support.annotation.LayoutRes;
 import android.view.View;
+
+import androidx.annotation.LayoutRes;
+import androidx.appcompat.app.ActionBar;
 
 /**
  * Classes actually having an ActionBar (as opposed to the Dialog activities)
@@ -32,7 +34,10 @@ public class AbstractActionBarActivity extends AbstractActivity {
 
 
     private void initUpAction() {
-       getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+       final ActionBar actionBar = getSupportActionBar();
+       if (actionBar != null) {
+           actionBar.setDisplayHomeAsUpEnabled(true);
+       }
     }
 
     @Override

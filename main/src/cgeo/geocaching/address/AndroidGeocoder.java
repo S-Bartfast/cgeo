@@ -7,15 +7,14 @@ import cgeo.geocaching.utils.Log;
 import android.content.Context;
 import android.location.Address;
 import android.location.Geocoder;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Callable;
 
-import io.reactivex.Observable;
-import io.reactivex.ObservableSource;
-import io.reactivex.Single;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Single;
 import org.apache.commons.collections4.CollectionUtils;
 
 public class AndroidGeocoder {
@@ -39,15 +38,12 @@ public class AndroidGeocoder {
         if (!Geocoder.isPresent()) {
             return Observable.error(new RuntimeException("no Android geocoder"));
         }
-        return Observable.defer(new Callable<ObservableSource<? extends Address>>() {
-            @Override
-            public Observable<Address> call() {
-                try {
-                    return addressesToObservable(geocoder.getFromLocationName(keyword, 20));
-                } catch (final Exception e) {
-                    Log.i("Unable to use Android reverse geocoder: " + e.getMessage());
-                    return Observable.error(e);
-                }
+        return Observable.defer(() -> {
+            try {
+                return addressesToObservable(geocoder.getFromLocationName(keyword, 20));
+            } catch (final Exception e) {
+                Log.i("Unable to use Android reverse geocoder: " + e.getMessage());
+                return Observable.error(e);
             }
         }).subscribeOn(AndroidRxUtils.networkScheduler);
     }
@@ -62,22 +58,19 @@ public class AndroidGeocoder {
         if (!Geocoder.isPresent()) {
             return Single.error(new RuntimeException("no Android reverse geocoder"));
         }
-        return Observable.defer(new Callable<Observable<Address>>() {
-            @Override
-            public Observable<Address> call() {
-                try {
-                    return addressesToObservable(geocoder.getFromLocation(coords.getLatitude(), coords.getLongitude(), 1));
-                } catch (final Exception e) {
-                    Log.i("Unable to use Android reverse geocoder: " + e.getMessage());
-                    return Observable.error(e);
-                }
+        return Observable.defer(() -> {
+            try {
+                return addressesToObservable(geocoder.getFromLocation(coords.getLatitude(), coords.getLongitude(), 1));
+            } catch (final Exception e) {
+                Log.i("Unable to use Android reverse geocoder: " + e.getMessage());
+                return Observable.error(e);
             }
         }).subscribeOn(AndroidRxUtils.networkScheduler).firstOrError();
     }
 
     private static Observable<Address> addressesToObservable(final List<Address> addresses) {
         return CollectionUtils.isEmpty(addresses) ?
-                Observable.<Address>error(new RuntimeException("no result from Android geocoder")) :
+                Observable.error(new RuntimeException("no result from Android geocoder")) :
                 Observable.fromIterable(addresses);
     }
 

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="proximity_notification_types">
+        <item>@string/pn_tone_only</item>
+        <item>@string/pn_text_only</item>
+        <item>@string/pn_tone_and_text</item>
+    </string-array>
+
+    <string-array name="proximity_notification_values">
+        <item>@string/pref_value_pn_tone_only</item>
+        <item>@string/pref_value_pn_text_only</item>
+        <item>@string/pref_value_pn_tone_and_text</item>
+    </string-array>
+
+    <string-array name="maprotation">
+        <item>@string/switch_off</item>
+        <item>@string/switch_manual</item>
+        <item>@string/switch_auto</item>
+    </string-array>
+
+    <string-array name="maprotationValues">
+        <item>@string/pref_maprotation_off</item>
+        <item>@string/pref_maprotation_manual</item>
+        <item>@string/pref_maprotation_auto</item>
+    </string-array>
+</resources>

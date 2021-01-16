@@ -7,8 +7,8 @@ import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Trackable;
 import cgeo.geocaching.utils.DisposableHandler;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -17,12 +17,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.CharEncoding;
 
 abstract class FileParser {
     /**
@@ -39,7 +39,7 @@ abstract class FileParser {
      *         if the input stream contains data not matching the file format of the parser
      */
     @NonNull
-    public abstract Collection<Geocache> parse(@NonNull final InputStream stream, @Nullable final DisposableHandler progressHandler) throws IOException, ParserException;
+    public abstract Collection<Geocache> parse(@NonNull InputStream stream, @Nullable DisposableHandler progressHandler) throws IOException, ParserException;
 
     /**
      * Convenience method for parsing a file.
@@ -58,7 +58,7 @@ abstract class FileParser {
     protected static StringBuilder readStream(@NonNull final InputStream is, @Nullable final DisposableHandler progressHandler) throws IOException {
         final StringBuilder buffer = new StringBuilder();
         final ProgressInputStream progressInputStream = new ProgressInputStream(is);
-        final BufferedReader input = new BufferedReader(new InputStreamReader(progressInputStream, CharEncoding.UTF_8));
+        final BufferedReader input = new BufferedReader(new InputStreamReader(progressInputStream, StandardCharsets.UTF_8));
 
         try {
             String line;

@@ -1,15 +1,15 @@
 package cgeo.geocaching.sensors;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.MainActivity;
+import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.utils.AngleUtils;
 
 import android.test.ActivityInstrumentationTestCase2;
 
 import java.util.concurrent.TimeUnit;
 
-import io.reactivex.Observable;
+import io.reactivex.rxjava3.core.Observable;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class SensorsTest extends ActivityInstrumentationTestCase2<MainActivity> {
 
@@ -23,6 +23,8 @@ public class SensorsTest extends ActivityInstrumentationTestCase2<MainActivity> 
     protected void setUp() throws Exception {
         super.setUp();
         sensors = Sensors.getInstance();
+        sensors.setupGeoDataObservables(Settings.useGooglePlayServices(), Settings.useLowPowerMode());
+        sensors.setupDirectionObservable();
     }
 
     public static void testGetDirectionNow() {
@@ -39,7 +41,7 @@ public class SensorsTest extends ActivityInstrumentationTestCase2<MainActivity> 
     }
 
     public void testDirectionObservable() {
-        assertDataAvailability(sensors.directionObservable());
+        assertDataAvailability(sensors.directionDataObservable());
     }
 
     public void testGeodataObservable() {

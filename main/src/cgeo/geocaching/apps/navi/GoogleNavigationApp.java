@@ -6,22 +6,21 @@ import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.IWaypoint;
 import cgeo.geocaching.models.Waypoint;
+import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.Log;
 
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ListAdapter;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 
 import java.util.ArrayList;
 
@@ -91,7 +90,7 @@ abstract class GoogleNavigationApp extends AbstractPointNavigationApp {
             final LayoutInflater inflater = LayoutInflater.from(context);
             final ListAdapter adapter = new ArrayAdapter<IWaypoint>(context, R.layout.cacheslist_item_select, targets) {
                 @Override
-                public View getView(final int position, final View convertView, final ViewGroup parent) {
+                public View getView(final int position, final View convertView, @NonNull final ViewGroup parent) {
 
                     final View view = convertView == null ? inflater.inflate(R.layout.cacheslist_item_select, parent, false) : convertView;
                     final TextView tv = (TextView) view.findViewById(R.id.text);
@@ -113,10 +112,9 @@ abstract class GoogleNavigationApp extends AbstractPointNavigationApp {
                 }
             };
 
-            new AlertDialog.Builder(context).setTitle(R.string.cache_menu_navigation_drive_select_target).setAdapter(adapter, new OnClickListener() {
-
-                @Override
-                public void onClick(final DialogInterface dialog, final int which) {
+            Dialogs.newBuilder(context)
+                .setTitle(R.string.cache_menu_navigation_drive_select_target)
+                .setAdapter(adapter, (dialog, which) -> {
                     final IWaypoint target = targets.get(which);
                     if (target instanceof Geocache) {
                         GoogleNavigationDrivingApp.super.navigate(context, (Geocache) target);
@@ -124,9 +122,7 @@ abstract class GoogleNavigationApp extends AbstractPointNavigationApp {
                     if (target instanceof Waypoint) {
                         navigate(context, (Waypoint) target);
                     }
-                }
-
-            }).show();
+                }).show();
         }
     }
 

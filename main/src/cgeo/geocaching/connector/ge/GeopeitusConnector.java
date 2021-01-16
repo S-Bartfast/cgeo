@@ -3,7 +3,7 @@ package cgeo.geocaching.connector.ge;
 import cgeo.geocaching.connector.AbstractConnector;
 import cgeo.geocaching.models.Geocache;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -34,11 +34,6 @@ public class GeopeitusConnector extends AbstractConnector {
     }
 
     @Override
-    public boolean getHttps() {
-        return false;
-    }
-
-    @Override
     public boolean isOwner(@NonNull final Geocache cache) {
         return false;
     }
@@ -51,6 +46,6 @@ public class GeopeitusConnector extends AbstractConnector {
     @Override
     @NonNull
     protected String getCacheUrlPrefix() {
-        return "http://" + getHost() + "/aare/";
+        return getHostUrl() + "/aare/";
     }
 }

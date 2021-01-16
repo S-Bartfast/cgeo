@@ -14,8 +14,11 @@ import android.view.GestureDetector;
 import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.MotionEvent;
 
+import org.mapsforge.core.model.BoundingBox;
+import org.mapsforge.core.model.Dimension;
 import org.mapsforge.core.model.LatLong;
 import org.mapsforge.core.model.Point;
+import org.mapsforge.core.util.LatLongUtils;
 import org.mapsforge.core.util.MercatorProjection;
 import org.mapsforge.map.android.view.MapView;
 
@@ -45,12 +48,13 @@ public class MfMapView extends MapView {
         if (getHeight() > 0) {
 
             try {
-                final LatLong low = MercatorProjection.fromPixels(center.x, center.y - getHeight() / 2, mapSize);
-                final LatLong high = MercatorProjection.fromPixels(center.x, center.y + getHeight() / 2, mapSize);
+                final LatLong low = mercatorFromPixels(center.x, center.y - getHeight() / 2, mapSize);
+                final LatLong high = mercatorFromPixels(center.x, center.y + getHeight() / 2, mapSize);
 
                 span = Math.abs(high.latitude - low.latitude);
             } catch (final IllegalArgumentException ex) {
-                Log.w("Exception when calculating latitude span", ex);
+                //should never happen due to outlier handling in "mercatorFromPixels", but leave it here just in case
+                Log.w("Exception when calculating longitude span (center:" + center + ", h/w:" + getDimension(), ex);
             }
         }
 
@@ -66,50 +70,75 @@ public class MfMapView extends MapView {
 
         if (getWidth() > 0) {
             try {
-                final LatLong low = MercatorProjection.fromPixels(center.x - getWidth() / 2, center.y, mapSize);
-                final LatLong high = MercatorProjection.fromPixels(center.x + getWidth() / 2, center.y, mapSize);
+                final LatLong low = mercatorFromPixels(center.x - getWidth() / 2, center.y, mapSize);
+                final LatLong high = mercatorFromPixels(center.x + getWidth() / 2, center.y, mapSize);
 
                 span = Math.abs(high.longitude - low.longitude);
             } catch (final IllegalArgumentException ex) {
-                Log.w("Exception when calculating longitude span", ex);
+                //should never happen due to outlier handling in "mercatorFromPixels", but leave it here just in case
+                Log.w("Exception when calculating longitude span (center:" + center + ", h/w:" + getDimension(), ex);
             }
         }
 
         return span;
     }
 
+    /**
+     * Calculates projection of pixel to coord.
+     * For this method to operate normally, it should 0 <= pixelX <= maxSize and 0 <= pixelY <= mapSize
+     *
+     * If either pixelX or pixelY is OUT of these bounds, it is assumed that the map displays the WHOLE WORLD
+     * (and this displayed whole world map is smaller than the device's display size of the map.)
+     * In these cases, lat/lon is projected to the world-border-coordinates (for lat: -85° - 85°, for lon: -180° - 180°)
+     */
+    private static LatLong mercatorFromPixels(final double pixelX, final double pixelY, final long mapSize) {
+
+        final double normedPixelX = toBounds(pixelX, 0, mapSize);
+        final double normedPixelY = toBounds(pixelY, 0, mapSize);
+
+        final LatLong ll = MercatorProjection.fromPixels(normedPixelX, normedPixelY, mapSize);
+
+        final double lon = toBounds(ll.longitude, -180, 180);
+        final double lat = toBounds(ll.latitude, -85, 85);
+
+        return new LatLong(lat, lon);
+
+    }
+
+    private static double toBounds(final double value, final double min, final double max) {
+        return value < min ? min : (value > max ? max : value);
+    }
+
     public int getMapZoomLevel() {
-        return getModel().mapViewPosition.getZoomLevel() + 3;
+        return getModel().mapViewPosition.getZoomLevel();
     }
 
     public void setMapZoomLevel(final int zoomLevel) {
-        getModel().mapViewPosition.setZoomLevel((byte) (zoomLevel - 3));
+        final byte zoomLevelToSet = zoomLevel < 0 ? 1 : (byte) zoomLevel;
+        getModel().mapViewPosition.setZoomLevel(zoomLevelToSet);
     }
 
-    public void zoomToViewport(final Viewport viewport) {
+    public void zoomToViewport(final Viewport viewport, final MapMode mapMode) {
+
+        getModel().mapViewPosition.setCenter(new LatLong(viewport.getCenter().getLatitude(), viewport.getCenter().getLongitude()));
 
         if (viewport.bottomLeft.equals(viewport.topRight)) {
-            setMapZoomLevel(Settings.getMapZoom(MapMode.SINGLE));
+            setMapZoomLevel(Settings.getMapZoom(mapMode));
         } else {
             final int tileSize = getModel().displayModel.getTileSize();
-            final long mapSize = MercatorProjection.getMapSize((byte) 0, tileSize);
-            final double dxMax = MercatorProjection.longitudeToPixelX(viewport.getLongitudeMax(), mapSize) / tileSize;
-            final double dxMin = MercatorProjection.longitudeToPixelX(viewport.getLongitudeMin(), mapSize) / tileSize;
-            final double zoomX = Math.floor(-Math.log(3.8) * Math.log(Math.abs(dxMax - dxMin)) + getWidth() / tileSize);
-            final double dyMax = MercatorProjection.longitudeToPixelX(viewport.getLatitudeMax(), mapSize) / tileSize;
-            final double dyMin = MercatorProjection.longitudeToPixelX(viewport.getLatitudeMin(), mapSize) / tileSize;
-            final double zoomY = Math.floor(-Math.log(3.8) * Math.log(Math.abs(dyMax - dyMin)) + getHeight() / tileSize);
-            final byte newZoom = (byte) Math.min(zoomX, zoomY);
+            final byte newZoom = LatLongUtils.zoomForBounds(new Dimension(getWidth(), getHeight()),
+                    new BoundingBox(viewport.getLatitudeMin(), viewport.getLongitudeMin(), viewport.getLatitudeMax(), viewport.getLongitudeMax()), tileSize);
             getModel().mapViewPosition.setZoomLevel(newZoom);
         }
-        getModel().mapViewPosition.setCenter(new LatLong(viewport.getCenter().getLatitude(), viewport.getCenter().getLongitude()));
     }
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(final MotionEvent ev) {
         gestureDetector.onTouchEvent(ev);
-        return super.onTouchEvent(ev);
+        synchronized (this) {
+            return super.onTouchEvent(ev);
+        }
     }
 
     private class GestureListener extends SimpleOnGestureListener {
@@ -123,7 +152,7 @@ public class MfMapView extends MapView {
 
         @Override
         public boolean onScroll(final MotionEvent e1, final MotionEvent e2,
-                final float distanceX, final float distanceY) {
+                                final float distanceX, final float distanceY) {
             if (onDragListener != null) {
                 onDragListener.onDrag();
             }

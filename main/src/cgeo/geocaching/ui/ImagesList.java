@@ -20,11 +20,6 @@ import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
-import android.net.Uri;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
-import android.support.v4.content.LocalBroadcastManager;
-import android.text.Html;
 import android.util.SparseArray;
 import android.view.ContextMenu;
 import android.view.LayoutInflater;
@@ -36,6 +31,12 @@ import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.core.content.FileProvider;
+import androidx.core.text.HtmlCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -43,16 +44,13 @@ import java.io.FileOutputStream;
 import java.util.Collection;
 import java.util.LinkedList;
 
-import butterknife.ButterKnife;
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.lang.GeoLocation;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.GpsDirectory;
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Cancellable;
-import io.reactivex.functions.Consumer;
-import io.reactivex.internal.disposables.CancellableDisposable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.internal.disposables.CancellableDisposable;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -108,14 +106,9 @@ public class ImagesList {
     public Disposable loadImages(final View parentView, final Collection<Image> images) {
         // Start with a fresh disposable because of this method can be called several times if the
         // enclosing activity is stopped/restarted.
-        final CompositeDisposable disposables = new CompositeDisposable(new CancellableDisposable(new Cancellable() {
-            @Override
-            public void cancel() throws Exception {
-                removeAllViews();
-            }
-        }));
+        final CompositeDisposable disposables = new CompositeDisposable(new CancellableDisposable(this::removeAllViews));
 
-        imagesView = ButterKnife.findById(parentView, R.id.spoiler_list);
+        imagesView = parentView.findViewById(R.id.spoiler_list);
 
         final HtmlImage imgGetter = new HtmlImage(geocode, true, false, false);
 
@@ -124,13 +117,13 @@ public class ImagesList {
             assert rowView != null;
 
             if (StringUtils.isNotBlank(img.getTitle())) {
-                final TextView titleView = ButterKnife.findById(rowView, R.id.title);
-                titleView.setText(Html.fromHtml(img.getTitle()));
+                final TextView titleView = rowView.findViewById(R.id.title);
+                titleView.setText(HtmlCompat.fromHtml(img.getTitle(), HtmlCompat.FROM_HTML_MODE_LEGACY));
             }
 
             if (StringUtils.isNotBlank(img.getDescription())) {
-                final TextView descView = ButterKnife.findById(rowView, R.id.description);
-                descView.setText(Html.fromHtml(img.getDescription()), TextView.BufferType.SPANNABLE);
+                final TextView descView = rowView.findViewById(R.id.description);
+                descView.setText(HtmlCompat.fromHtml(img.getDescription(), HtmlCompat.FROM_HTML_MODE_LEGACY), TextView.BufferType.SPANNABLE);
                 descView.setVisibility(View.VISIBLE);
             }
 
@@ -138,12 +131,7 @@ public class ImagesList {
             assert imageView != null;
             rowView.addView(imageView);
             imagesView.addView(rowView);
-            disposables.add(AndroidRxUtils.bindActivity(activity, imgGetter.fetchDrawable(img.getUrl())).subscribe(new Consumer<BitmapDrawable>() {
-                @Override
-                public void accept(final BitmapDrawable image) {
-                    display(imageView, image, img, rowView);
-                }
-            }));
+            disposables.add(AndroidRxUtils.bindActivity(activity, imgGetter.fetchDrawable(img.getUrl())).subscribe(image -> display(imageView, image, img, rowView)));
         }
 
         return disposables;
@@ -159,12 +147,7 @@ public class ImagesList {
 
             imageView.setImageResource(R.drawable.image_not_loaded);
             imageView.setClickable(true);
-            imageView.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(final View view) {
-                    viewImageInStandardApp(img, image);
-                }
-            });
+            imageView.setOnClickListener(view1 -> viewImageInStandardApp(img, image));
             activity.registerForContextMenu(imageView);
             imageView.setImageDrawable(image);
             imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -211,23 +194,12 @@ public class ImagesList {
     private void addGeoOverlay(final RelativeLayout imageViewLayout, final Geopoint gpt) {
         final ImageView geoOverlay = (ImageView) imageViewLayout.findViewById(R.id.geo_overlay);
         geoOverlay.setVisibility(View.VISIBLE);
-        geoOverlay.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(final View wpNavView) {
-                wpNavView.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(final View v) {
-                        NavigationAppFactory.startDefaultNavigationApplication(1, activity, gpt);
-                    }
-                });
-                wpNavView.setOnLongClickListener(new View.OnLongClickListener() {
-                    @Override
-                    public boolean onLongClick(final View v) {
-                        NavigationAppFactory.startDefaultNavigationApplication(2, activity, gpt);
-                        return true;
-                    }
-                });
-            }
+        geoOverlay.setOnClickListener(wpNavView -> {
+            wpNavView.setOnClickListener(v -> NavigationAppFactory.startDefaultNavigationApplication(1, activity, gpt));
+            wpNavView.setOnLongClickListener(v -> {
+                NavigationAppFactory.startDefaultNavigationApplication(2, activity, gpt);
+                return true;
+            });
         });
     }
 
@@ -255,35 +227,32 @@ public class ImagesList {
 
     public boolean onContextItemSelected(final MenuItem item) {
         final BitmapDrawable currentDrawable = (BitmapDrawable) currentView.getDrawable();
-        switch (item.getItemId()) {
-            case R.id.image_open_file:
-                viewImageInStandardApp(currentImage, currentDrawable);
-                return true;
-            case R.id.image_open_browser:
-                if (currentImage != null) {
-                    currentImage.openInBrowser(activity);
-                }
-                return true;
-            case R.id.image_add_waypoint:
-                final Geopoint coords = geoPoints.get(currentView.getId());
-                if (geocache != null && coords != null) {
-                    final Waypoint waypoint = new Waypoint(currentImage.getTitle(), WaypointType.WAYPOINT, true);
-                    waypoint.setCoords(coords);
-                    geocache.addOrChangeWaypoint(waypoint, true);
-                    final Intent intent = new Intent(Intents.INTENT_CACHE_CHANGED);
-                    intent.putExtra(Intents.EXTRA_WPT_PAGE_UPDATE, true);
-                    LocalBroadcastManager.getInstance(activity).sendBroadcast(intent);
-                }
-                return true;
-            case R.id.menu_navigate:
-                final Geopoint geopoint = geoPoints.get(currentView.getId());
-                if (geopoint != null) {
-                    NavigationAppFactory.showNavigationMenu(activity, null, null, geopoint);
-                }
-                return true;
-            default:
-                return false;
+        final int itemId = item.getItemId();
+        if (itemId == R.id.image_open_file) {
+            viewImageInStandardApp(currentImage, currentDrawable);
+        } else if (itemId == R.id.image_open_browser) {
+            if (currentImage != null) {
+                currentImage.openInBrowser(activity);
+            }
+        } else if (itemId == R.id.image_add_waypoint) {
+            final Geopoint coords = geoPoints.get(currentView.getId());
+            if (geocache != null && coords != null) {
+                final Waypoint waypoint = new Waypoint(currentImage.getTitle(), WaypointType.WAYPOINT, true);
+                waypoint.setCoords(coords);
+                geocache.addOrChangeWaypoint(waypoint, true);
+                final Intent intent = new Intent(Intents.INTENT_CACHE_CHANGED);
+                intent.putExtra(Intents.EXTRA_WPT_PAGE_UPDATE, true);
+                LocalBroadcastManager.getInstance(activity).sendBroadcast(intent);
+            }
+        } else if (itemId == R.id.menu_navigate) {
+            final Geopoint geopoint = geoPoints.get(currentView.getId());
+            if (geopoint != null) {
+                NavigationAppFactory.showNavigationMenu(activity, null, null, geopoint);
+            }
+        } else {
+            return false;
         }
+        return true;
     }
 
     private static String mimeTypeForUrl(final String url) {
@@ -307,11 +276,19 @@ public class ImagesList {
         try {
             final Intent intent = new Intent().setAction(Intent.ACTION_VIEW);
             final File file = img.isLocalFile() ? img.localFile() : LocalStorage.getGeocacheDataFile(geocode, img.getUrl(), true, true);
+            final String authority = activity.getApplicationContext().getString(R.string.file_provider_authority);
             if (file.exists()) {
-                intent.setDataAndType(Uri.fromFile(file), mimeTypeForUrl(img.getUrl()));
+                intent.setDataAndType(
+                        FileProvider.getUriForFile(activity, authority, file),
+                        mimeTypeForUrl(img.getUrl())
+                );
             } else {
-                intent.setDataAndType(Uri.fromFile(saveToTemporaryJPGFile(image)), "image/jpeg");
+                intent.setDataAndType(
+                        FileProvider.getUriForFile(activity, authority, saveToTemporaryJPGFile(image)),
+                        "image/jpeg"
+                );
             }
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             activity.startActivity(intent);
         } catch (final Exception e) {
             Log.e("ImagesList.viewImageInStandardApp", e);

@@ -1,10 +1,14 @@
 package cgeo.geocaching.ui;
 
+import cgeo.geocaching.R;
+import cgeo.geocaching.settings.Settings;
+import cgeo.geocaching.utils.CalculationUtils;
+import static cgeo.geocaching.models.CalcState.ERROR_CHAR;
+import static cgeo.geocaching.models.CalcState.ERROR_STRING;
+
+import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.widget.GridLayout;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -14,61 +18,82 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import androidx.core.content.ContextCompat;
+import androidx.gridlayout.widget.GridLayout;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Locale;
 
-import cgeo.geocaching.R;
-
-import static cgeo.geocaching.models.CalcState.ERROR_CHAR;
-import static cgeo.geocaching.models.CalcState.ERROR_STRING;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
- * Class used to display a variable with an equation, such as:
- *  X = a^2 = b^2
+ * Class used to display a variable with an equation, such as: X = a^2 = b^2
  */
-
 public class CalculatorVariable extends LinearLayout {
 
+    /** actual name and expression used */
     private final VariableData variableData;
 
-    // Views used to display the name and expression of the variable.
-    // Note that the actual name and expression used are stored in the variableData 'struct'
-    // and these views are only used to display that information
+    /** view to display the name of the variable */
     private final TextView name;
+
+    /** view to display the expression of the variable */
     private final EditText expression;
 
-    // Variables used to save unnecessary re-computing.
+    /** cached result of the expression */
     private double cachedValue;
+
+    /** indicates if recomputation needs to be done */
     private boolean cacheDirty;
 
-    // Data used to capture the state of this Variable such that it can be restored again later.
-    public static class VariableData implements Serializable {
-        final char name;
-        String expression; // Note, we have to use a String rather than an Editable as Editable's can't be serialized
+    /**
+     * Data used to capture the state of this Variable such that it can be restored again later
+     */
+    public static class VariableData implements Serializable, JSONAble {
+        private static final long serialVersionUID = -5181457941802605249L;
+        private final char name;
+        /** Note, we have to use a String rather than an Editable as Editable's can't be serialized */
+        private String expression;
 
         public VariableData(final char name) {
             this.name = name;
             expression = "";
         }
 
-        public VariableData(final JSONObject json) {
+        private VariableData(final JSONObject json) {
             name = (char) json.optInt("name", ERROR_CHAR);
             expression = json.optString("expression", ERROR_STRING);
         }
 
+        public char getName() {
+            return name;
+        }
+
+        @Override
         public JSONObject toJSON() throws JSONException {
-            final JSONObject rv = new JSONObject();
+            final JSONObject returnValue = new JSONObject();
 
-            rv.put("name", name);
-            rv.put("expression", expression);
+            returnValue.put("name", name);
+            returnValue.put("expression", expression);
 
-            return rv;
+            return returnValue;
+        }
+
+        public void switchToLowerCase() {
+            this.expression = this.expression.toLowerCase(Locale.US);
         }
     }
 
+    public static class VariableDataFactory implements JSONAbleFactory<VariableData> {
+        @Override
+        public VariableData fromJSON(final JSONObject json) {
+            return new VariableData(json);
+        }
+    }
+
+    @SuppressLint("SetTextI18n")
     public CalculatorVariable(final Context context, final VariableData variableData, final String hintText, final TextWatcher textWatcher) {
         super(context);
         this.variableData = variableData;
@@ -86,7 +111,7 @@ public class CalculatorVariable extends LinearLayout {
         name.setText(variableData.name + " = ");
 
         expression = new EditText(context);
-        expression.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        expression.setLayoutParams(new LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         expression.setMaxLines(Integer.MAX_VALUE);
         expression.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         expression.setHint(hintText);
@@ -100,8 +125,10 @@ public class CalculatorVariable extends LinearLayout {
                 // Intentionally left empty
             }
 
+            /**
+             * Only use afterTextChanged
+             */
             @Override
-            // Only use afterTextChanged
             public void onTextChanged(final CharSequence s, final int start, final int before, final int count) {
                 // Intentionally left empty
             }
@@ -129,7 +156,7 @@ public class CalculatorVariable extends LinearLayout {
         return variableData;
     }
 
-    public boolean isCacheDirty() {
+    private boolean isCacheDirty() {
         return cacheDirty;
     }
 
@@ -141,35 +168,44 @@ public class CalculatorVariable extends LinearLayout {
         this.cacheDirty = cacheDirty;
     }
 
-    // Method to returned the cached values as a String
-    // This is used to display the result in the UI.
-    public String getCachedString() {
-        final String rv;
+    /**
+     * This is used to display the result in the UI
+     *
+     * @return cached values as a String
+     */
+    private String getCachedString() {
+        final String returnValue;
 
         if (variableData.expression == null || variableData.expression.length() == 0) {
-            rv = "_";
+            returnValue = getContext().getString(R.string.empty_equation_result);
         } else if (Double.isNaN(getCachedValue())) {
-            rv = "*";
+            returnValue = getContext().getString(R.string.equation_error_result);
         } else {
-            rv = String.valueOf((int) getCachedValue());
+            returnValue = String.valueOf((int) getCachedValue());
         }
 
-        return rv;
+        return returnValue;
     }
 
-    // Method to returned the cached values as a Double
-    // This is used to compute the value of another variable.
-    public double getCachedValue() {
+    /**
+     * This is used to compute the value of another variable
+     *
+     * @return cached values as a Double
+     */
+    private double getCachedValue() {
         return cachedValue;
     }
 
-    public void setCachedValue(final double cachedValue) {
+    private void setCachedValue(final double cachedValue) {
         this.cachedValue = cachedValue;
         setCacheDirty(false);
 
+        final boolean lightSkin = Settings.isLightSkin();
+        final int validColour = ContextCompat.getColor(getContext(), lightSkin ? R.color.text_light : R.color.text_dark);
+        final int invalidColour = ContextCompat.getColor(getContext(), lightSkin ? R.color.text_hint_light : R.color.text_hint_dark);
+
         // Make the name colour grey if value is invalid
-        final int nameColour = Double.isNaN(getCachedValue()) ? ContextCompat.getColor(getContext(), R.color.text_hint_dark) : Color.WHITE;
-        name.setTextColor(nameColour);
+        name.setTextColor(Double.isNaN(getCachedValue()) ? invalidColour : validColour);
     }
 
     public char getName() {
@@ -178,10 +214,6 @@ public class CalculatorVariable extends LinearLayout {
 
     public String getExpression() {
         return variableData.expression;
-    }
-
-    public void setExpressionHint(final CharSequence theHint) {
-        expression.setHint(theHint);
     }
 
     public int getExpressionId() {
@@ -211,7 +243,7 @@ public class CalculatorVariable extends LinearLayout {
             }
 
             try {
-                setCachedValue(cgeo.geocaching.utils.CalculationUtils.eval(expression));
+                setCachedValue(new CalculationUtils(expression).eval());
             } catch (final Exception e) {
                 setCachedValue(Double.NaN);
             }
@@ -220,4 +252,9 @@ public class CalculatorVariable extends LinearLayout {
         return getCachedValue();
     }
 
+    public void switchToLowerCase() {
+        variableData.switchToLowerCase();
+        expression.setText(variableData.expression);
+        setCacheDirty();
+    }
 }

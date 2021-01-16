@@ -6,8 +6,8 @@ import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.Log;
 
 import android.app.Activity;
-import android.content.DialogInterface;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import java.util.Date;
 
@@ -29,12 +29,7 @@ public class CalendarAdder {
         if (cache.isPastEvent()) {
             // Event is in the past, only add to calendar after confirmation
             Dialogs.confirmYesNo(activity, R.string.helper_calendar_pastevent_title, activity.getString(R.string.helper_calendar_pastevent_question),
-                    new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(final DialogInterface dialog, final int id) {
-                            entry.addEntryToCalendar(activity);
-                        }
-                    });
+                (dialog, id) -> entry.addEntryToCalendar(activity));
         } else {
             entry.addEntryToCalendar(activity);
         }

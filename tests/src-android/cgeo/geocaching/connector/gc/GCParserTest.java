@@ -1,11 +1,5 @@
 package cgeo.geocaching.connector.gc;
 
-import static cgeo.geocaching.connector.gc.GCParser.deleteModifiedCoordinates;
-import static cgeo.geocaching.connector.gc.GCParser.editModifiedCoordinates;
-import static cgeo.geocaching.connector.gc.GCParser.requestHtmlPage;
-import static cgeo.geocaching.enumerations.LoadFlags.LOAD_CACHE_ONLY;
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.CgeoApplicationTest;
 import cgeo.geocaching.SearchResult;
@@ -23,14 +17,20 @@ import cgeo.geocaching.test.R;
 import cgeo.geocaching.test.mock.MockedCache;
 import cgeo.geocaching.utils.DisposableHandler;
 import cgeo.test.Compare;
+import static cgeo.geocaching.connector.gc.GCParser.deleteModifiedCoordinates;
+import static cgeo.geocaching.connector.gc.GCParser.editModifiedCoordinates;
+import static cgeo.geocaching.connector.gc.GCParser.requestHtmlPage;
+import static cgeo.geocaching.enumerations.LoadFlags.LOAD_CACHE_ONLY;
 
-import android.support.annotation.RawRes;
 import android.test.suitebuilder.annotation.MediumTest;
+
+import androidx.annotation.RawRes;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class GCParserTest extends AbstractResourceInstrumentationTestCase {
 
@@ -196,7 +196,7 @@ public class GCParserTest extends AbstractResourceInstrumentationTestCase {
 
     private static void assertWaypointsFromNote(final Geocache cache, final Geopoint[] expected, final String note) {
         cache.setPersonalNote(note);
-        cache.setWaypoints(new ArrayList<Waypoint>(), false);
+        cache.setWaypoints(new ArrayList<>(), false);
         cache.addWaypointsFromNote();
         final List<Waypoint> waypoints = cache.getWaypoints();
         assertThat(waypoints).hasSize(expected.length);
@@ -207,15 +207,15 @@ public class GCParserTest extends AbstractResourceInstrumentationTestCase {
 
     public void testWaypointParsing() {
         Geocache cache = parseCache(R.raw.gc366bq);
-        assertThat(cache.getWaypoints()).hasSize(13);
+        assertThat(cache.getWaypoints()).hasSize(14);
         //make sure that waypoints are not duplicated
         cache = parseCache(R.raw.gc366bq);
-        assertThat(cache.getWaypoints()).hasSize(13);
+        assertThat(cache.getWaypoints()).hasSize(14);
     }
 
     public static void testNoteParsingWaypointTypes() {
         final Geocache cache = new Geocache();
-        cache.setWaypoints(new ArrayList<Waypoint>(), false);
+        cache.setWaypoints(new ArrayList<>(), false);
         cache.setPersonalNote("\"Parking area at PARKING=N 50° 40.666E 006° 58.222\n" + "My calculated final coordinates: FINAL=N 50° 40.777E 006° 58.111\n" + "Get some ice cream at N 50° 40.555E 006° 58.000\"");
 
         cache.addWaypointsFromNote();
@@ -298,5 +298,12 @@ public class GCParserTest extends AbstractResourceInstrumentationTestCase {
                 .isEqualTo("https://www.dropbox.com/s/1kakwnpny8698hm/QR_Hintergrund.jpg?dl=1");
         assertThat(GCParser.fullScaleImageUrl("http://imgcdn.geocaching.com/track/display/33cee358-f692-4f90-ace0-80c5a2c60a5c.jpg"))
                 .isEqualTo("http://imgcdn.geocaching.com/track/33cee358-f692-4f90-ace0-80c5a2c60a5c.jpg");
+    }
+
+    public void testGetUsername() {
+        // Old style page
+        assertThat(GCParser.getUsername(MockedCache.readCachePage("GC2CJPF"))).isEqualTo("ra_sch");
+        // New style page
+        assertThat(GCParser.getUsername(MockedCache.readCachePage("GC5BRQK"))).isEqualTo("ra_sch");
     }
 }

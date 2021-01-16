@@ -5,11 +5,6 @@ import cgeo.geocaching.activity.ActivityMixin;
 import cgeo.geocaching.utils.FileUtils;
 import cgeo.geocaching.utils.Log;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -17,7 +12,13 @@ import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.io.File;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 /**
  * Represent an Image along with Title and Description.
@@ -389,5 +390,10 @@ public class Image implements Parcelable {
     @Override
     public int hashCode() {
         return new HashCodeBuilder().append(uri).append(title).append(description).build();
+    }
+
+    @Override
+    public String toString() {
+        return "[Uri:" + uri + "/Title:" + title + "/Desc:" + description + "]";
     }
 }

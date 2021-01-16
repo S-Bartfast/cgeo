@@ -1,8 +1,7 @@
 package cgeo.geocaching.connector.oc;
 
-import android.support.annotation.StringRes;
-
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 
 public interface IOCAuthParams {
 

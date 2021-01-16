@@ -4,7 +4,8 @@ import cgeo.geocaching.enumerations.CacheListType;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -12,25 +13,26 @@ public class Intents {
 
     public static final int SETTINGS_ACTIVITY_REQUEST_CODE = 1;
     public static final int SEARCH_REQUEST_CODE = 2;
-    public static final int APP_INVITE_REQUEST_CODE = 3;
 
     private static final String PREFIX = "cgeo.geocaching.intent.extra.";
 
     public static final String EXTRA_ADDRESS = PREFIX + "address";
     public static final String EXTRA_COORDS = PREFIX + "coords";
-    public static final String EXTRA_LATITUDE = PREFIX + "latitude";
-    public static final String EXTRA_LONGITUDE = PREFIX + "longitude";
-    public static final String EXTRA_COUNT = PREFIX + "count";
     public static final String EXTRA_GEOCODE = PREFIX + "geocode";
     public static final String EXTRA_GEOCACHE = PREFIX + "geocache";
     public static final String EXTRA_GUID = PREFIX + "guid";
     public static final String EXTRA_BRAND = PREFIX + "brand";
     public static final String EXTRA_IMAGE = PREFIX + "image";
+    public static final String EXTRA_INDEX = PREFIX + "index";
+    public static final String EXTRA_DELETE_FLAG = PREFIX + "deleteflag";
     public static final String EXTRA_IMAGES = PREFIX + "images";
+    public static final String EXTRA_MAX_IMAGE_UPLOAD_SIZE = PREFIX + "max-image-upload-size";
+    public static final String EXTRA_IMAGE_CAPTION_MANDATORY = PREFIX + "image-caption-mandatory";
     public static final String EXTRA_ID = PREFIX + "id";
     public static final String EXTRA_KEYWORD = PREFIX + "keyword";
     public static final String EXTRA_KEYWORD_SEARCH = PREFIX + "keyword_search";
     public static final String EXTRA_LIST_ID = PREFIX + "list_id";
+    public static final String EXTRA_PQ_LIST_IMPORT = PREFIX + "pq_list_import";
     public static final String EXTRA_COORD_DESCRIPTION = PREFIX + "coord_description";
     public static final String EXTRA_SCALE = PREFIX + "scale";
     public static final String EXTRA_WPT_PAGE_UPDATE = PREFIX + "wpt_page_update";
@@ -51,13 +53,14 @@ public class Intents {
      */
     private static final String EXTRA_LIST_TYPE = PREFIX + "list_type";
     public static final String EXTRA_MAP_FILE = PREFIX + "map_file";
+    public static final String EXTRA_GPX_FILE = PREFIX + "gpx_file";
     public static final String EXTRA_NAME = PREFIX + "name";
     public static final String EXTRA_SEARCH = PREFIX + "search";
     public static final String EXTRA_START_DIR = PREFIX + "start_dir";
+    public static final String EXTRA_SELECTDIR = PREFIX + "selectDir";
     public static final String EXTRA_TRACKING_CODE = PREFIX + "tracking_code";
     public static final String EXTRA_USERNAME = PREFIX + "username";
     public static final String EXTRA_WAYPOINT_ID = PREFIX + "waypoint_id";
-    public static final String EXTRA_CACHELIST = PREFIX + "cache_list";
     public static final String EXTRA_POCKET_GUID = PREFIX + "pocket_guid";
 
     private static final String PREFIX_ACTION = "cgeo.geocaching.intent.action.";
@@ -82,7 +85,6 @@ public class Intents {
 
     private static final String PREFIX_TOKEN_AUTH = "cgeo.geocaching.intent.tokenauth.";
     public static final String EXTRA_TOKEN_AUTH_URL_TOKEN = PREFIX_TOKEN_AUTH + "token";
-    public static final String EXTRA_TOKEN_AUTH_URL_REGISTER = PREFIX_TOKEN_AUTH + "register";
     public static final String EXTRA_TOKEN_AUTH_USERNAME = PREFIX_TOKEN_AUTH + "username";
     public static final String EXTRA_TOKEN_AUTH_PASSWORD = PREFIX_TOKEN_AUTH + "password";
 

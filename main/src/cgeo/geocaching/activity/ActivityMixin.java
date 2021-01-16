@@ -4,17 +4,11 @@ import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.MainActivity;
 import cgeo.geocaching.R;
 import cgeo.geocaching.settings.Settings;
+import cgeo.geocaching.utils.Log;
 
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.app.NavUtils;
-import android.support.v4.app.TaskStackBuilder;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.ActionBarActivity;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.Window;
@@ -22,6 +16,13 @@ import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.widget.EditText;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NavUtils;
+import androidx.core.app.TaskStackBuilder;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -36,15 +37,15 @@ public final class ActivityMixin {
             return;
         }
 
-        if (activity instanceof ActionBarActivity) {
-            final ActionBar actionBar = ((ActionBarActivity) activity).getSupportActionBar();
+        if (activity instanceof AppCompatActivity) {
+            final ActionBar actionBar = ((AppCompatActivity) activity).getSupportActionBar();
             if (actionBar != null) {
                 actionBar.setTitle(text);
             }
         }
     }
 
-    public static void showProgress(final ActionBarActivity activity, final boolean show) {
+    public static void showProgress(final AppCompatActivity activity, final boolean show) {
         if (activity == null) {
             return;
         }
@@ -85,6 +86,7 @@ public final class ActivityMixin {
     }
 
     private static void showCgeoToast(final Context context, final String text, final int toastDuration) {
+        Log.v("[" + context.getClass().getName() + "].showToast(" + text + "){" + toastDuration + "}");
         final Toast toast = Toast.makeText(context, text, toastDuration);
         toast.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0, 100);
         toast.show();
@@ -92,13 +94,7 @@ public final class ActivityMixin {
 
     private static void postShowToast(final Activity activity, final String text, final int toastDuration) {
         if (StringUtils.isNotBlank(text)) {
-            activity.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    showCgeoToast(activity, text, toastDuration);
-                }
-
-            });
+            activity.runOnUiThread(() -> showCgeoToast(activity, text, toastDuration));
         }
     }
 
@@ -148,6 +144,10 @@ public final class ActivityMixin {
         postShowToast(activity, text, Toast.LENGTH_SHORT);
     }
 
+    public static void showShortToast(final Activity activity, @StringRes final int resId) {
+        postShowToast(activity, activity.getString(resId), Toast.LENGTH_SHORT);
+    }
+
     public static void onCreate(final Activity abstractActivity, final boolean keepScreenOn) {
         final Window window = abstractActivity.getWindow();
         if (keepScreenOn) {
@@ -163,10 +163,10 @@ public final class ActivityMixin {
     }
 
     public static void invalidateOptionsMenu(final Activity activity) {
-        if (activity instanceof ActionBarActivity) {
-            ((ActionBarActivity) activity).supportInvalidateOptionsMenu();
+        if (activity instanceof AppCompatActivity) {
+            ((AppCompatActivity) activity).supportInvalidateOptionsMenu();
         } else {
-            ActivityCompat.invalidateOptionsMenu(activity);
+            activity.invalidateOptionsMenu();
         }
     }
 
@@ -191,7 +191,7 @@ public final class ActivityMixin {
         }
 
         editText.getText().replace(start, end, completeText);
-        final int newCursor = moveCursor ? start + completeText.length() : start;
+        final int newCursor = Math.max(0, Math.min(editText.getText().length(), moveCursor ? start + completeText.length() : start));
         editText.setSelection(newCursor);
     }
 

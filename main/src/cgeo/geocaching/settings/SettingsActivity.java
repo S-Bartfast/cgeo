@@ -1,17 +1,17 @@
 package cgeo.geocaching.settings;
 
+import cgeo.geocaching.BuildConfig;
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.Intents;
 import cgeo.geocaching.R;
 import cgeo.geocaching.SelectMapfileActivity;
-import cgeo.geocaching.activity.ActivityMixin;
 import cgeo.geocaching.apps.navi.NavigationAppFactory;
 import cgeo.geocaching.apps.navi.NavigationAppFactory.NavigationAppsEnum;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.capability.ICredentials;
 import cgeo.geocaching.connector.ec.ECConnector;
 import cgeo.geocaching.connector.gc.GCConnector;
-import cgeo.geocaching.connector.su.GeocachingSuConnector;
+import cgeo.geocaching.connector.su.SuConnector;
 import cgeo.geocaching.files.SimpleDirChooser;
 import cgeo.geocaching.gcvote.GCVote;
 import cgeo.geocaching.maps.MapProviderFactory;
@@ -25,47 +25,49 @@ import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.storage.LocalStorage;
 import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.AndroidRxUtils;
-import cgeo.geocaching.utils.DatabaseBackupUtils;
+import cgeo.geocaching.utils.ApplicationSettings;
+import cgeo.geocaching.utils.BackupUtils;
 import cgeo.geocaching.utils.DebugUtils;
 import cgeo.geocaching.utils.FileUtils;
 import cgeo.geocaching.utils.Formatter;
 import cgeo.geocaching.utils.Log;
+import cgeo.geocaching.utils.MapDownloadUtils;
 import cgeo.geocaching.utils.ProcessUtils;
+import cgeo.geocaching.utils.ShareUtils;
 
 import android.R.string;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.app.backup.BackupManager;
-import android.content.ActivityNotFoundException;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Bundle;
+import android.preference.CheckBoxPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
-import android.preference.Preference.OnPreferenceChangeListener;
-import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
-import android.support.annotation.AnyRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.ListAdapter;
 
+import androidx.annotation.AnyRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.commons.lang3.StringUtils;
 import org.openintents.intents.FileManagerIntents;
 
@@ -86,6 +88,8 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
     public static final int NO_RESTART_NEEDED = 1;
     public static final int RESTART_NEEDED = 2;
 
+    private final BackupUtils backupUtils = new BackupUtils(SettingsActivity.this);
+
     /**
      * Enumeration for directory choosers. This is how we can retrieve information about the
      * directory and preference key in onActivityResult() easily just by knowing
@@ -96,7 +100,9 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                 LocalStorage.getGpxImportDirectory().getPath(), false),
         GPX_EXPORT_DIR(2, R.string.pref_gpxExportDir,
                 LocalStorage.getGpxExportDirectory().getPath(), true),
-        THEMES_DIR(3, R.string.pref_renderthemepath, "", false);
+        THEMES_DIR(3, R.string.pref_renderthemepath, "", false),
+        BACKUP_DIR(4, R.string.pref_fakekey_preference_restore_dirselect,
+                       LocalStorage.getBackupRootDirectory().getPath() + "/", false);
         public final int requestCode;
         public final int keyId;
         public final String defaultValue;
@@ -112,7 +118,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
-        // Set light skin in preferences only for devices > 2.x, it doesn't work under 2.x
+        ApplicationSettings.setLocale(this);
         setTheme(Settings.isLightSkin() ? R.style.settings_light : R.style.settings);
         super.onCreate(savedInstanceState);
 
@@ -157,6 +163,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         initDefaultNavigationPreferences();
         initBackupButtons();
         initDbLocationPreference();
+        initMapPreferences();
         initGeoDirPreferences();
         initDebugPreference();
         initForceOrientationSensorPreference();
@@ -166,6 +173,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         initNavigationMenuPreferences();
         initLanguagePreferences();
         initMaintenanceButtons();
+        initCacheDetailsPreference();
 
         for (final int k : new int[] {
                 R.string.pref_pass_vote, R.string.pref_signature,
@@ -174,11 +182,30 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                 R.string.pref_fakekey_dataDir,
                 R.string.pref_mapDirectory, R.string.pref_defaultNavigationTool,
                 R.string.pref_defaultNavigationTool2, R.string.pref_webDeviceName,
-                R.string.pref_fakekey_preference_backup_info, R.string.pref_twitter_cache_message, R.string.pref_twitter_trackable_message,
-                R.string.pref_ec_icons }) {
+                R.string.pref_fakekey_preference_backup, R.string.pref_twitter_cache_message,
+                R.string.pref_twitter_trackable_message, R.string.pref_ec_icons, R.string.pref_selected_language }) {
             bindSummaryToStringValue(k);
         }
         bindGeocachingUserToGCVoteuser();
+    }
+
+    /**
+     * Fill the choice list for map sources.
+     */
+    private void initMapSourcePreference() {
+        final ListPreference pref = (ListPreference) getPreference(R.string.pref_mapsource);
+
+        final Collection<MapSource> mapSources = MapProviderFactory.getMapSources();
+        final CharSequence[] entries = new CharSequence[mapSources.size()];
+        final CharSequence[] values = new CharSequence[mapSources.size()];
+        int idx = 0;
+        for (MapSource mapSource : MapProviderFactory.getMapSources()) {
+            entries[idx] = mapSource.getName();
+            values[idx] = mapSource.getId();
+            idx++;
+        }
+        pref.setEntries(entries);
+        pref.setEntryValues(values);
     }
 
     private void initNavigationMenuPreferences() {
@@ -193,6 +220,14 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         getPreference(R.string.preference_screen_basicmembers)
                 .setEnabled(!Settings.isGCPremiumMember());
         redrawScreen(R.string.preference_screen_navigation_menu);
+    }
+
+    private void initCacheDetailsPreference() {
+        final CheckBoxPreference customTabsPreference = (CheckBoxPreference) getPreference(R.string.pref_customtabs_as_browser);
+        if (!ProcessUtils.isChromeLaunchable()) {
+            customTabsPreference.setEnabled(false);
+            customTabsPreference.setChecked(false);
+        }
     }
 
     private void initServicePreferences() {
@@ -210,7 +245,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         getPreference(R.string.preference_screen_ec).setSummary(getServiceSummary(Settings.isECConnectorActive()));
 
         getPreference(R.string.pref_connectorSUActive).setOnPreferenceChangeListener(this);
-        setWebsite(R.string.pref_fakekey_su_website, GeocachingSuConnector.getInstance().getHost());
+        setWebsite(R.string.pref_fakekey_su_website, SuConnector.getInstance().getHost());
         getPreference(R.string.preference_screen_su).setSummary(getServiceSummary(Settings.isSUConnectorActive()));
 
         getPreference(R.string.pref_ratingwanted).setOnPreferenceChangeListener(this);
@@ -228,13 +263,10 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
 
     private void setWebsite(final int preferenceKey, final String urlOrHost) {
         final Preference preference = getPreference(preferenceKey);
-        preference.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                final String url = StringUtils.startsWith(urlOrHost, "http") ? urlOrHost : "http://" + urlOrHost;
-                ProcessUtils.openUri(url, SettingsActivity.this);
-                return true;
-            }
+        preference.setOnPreferenceClickListener(preference1 -> {
+            final String url = StringUtils.startsWith(urlOrHost, "http") ? urlOrHost : "http://" + urlOrHost;
+            ShareUtils.openUrl(SettingsActivity.this, url);
+            return true;
         });
     }
 
@@ -251,23 +283,6 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
     }
 
     /**
-     * Fill the choice list for map sources.
-     */
-    private void initMapSourcePreference() {
-        final ListPreference pref = (ListPreference) getPreference(R.string.pref_mapsource);
-
-        final List<MapSource> mapSources = MapProviderFactory.getMapSources();
-        final CharSequence[] entries = new CharSequence[mapSources.size()];
-        final CharSequence[] values = new CharSequence[mapSources.size()];
-        for (int i = 0; i < mapSources.size(); ++i) {
-            entries[i] = mapSources.get(i).getName();
-            values[i] = String.valueOf(mapSources.get(i).getNumericalId());
-        }
-        pref.setEntries(entries);
-        pref.setEntryValues(values);
-    }
-
-    /**
      * Fill the choice list for external private cgeo directory.
      */
     private void initExtCgeoDirPreference() {
@@ -278,25 +293,16 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         }
 
         final AtomicLong usedBytes = new AtomicLong();
-        dataDirPref.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                final ProgressDialog progress = ProgressDialog.show(SettingsActivity.this, getString(R.string.calculate_dataDir_title), getString(R.string.calculate_dataDir), true, false);
-                AndroidRxUtils.andThenOnUi(Schedulers.io(), new Runnable() {
-                    @Override
-                    public void run() {
-                        // calculate disk usage
-                        usedBytes.set(FileUtils.getSize(LocalStorage.getExternalPrivateCgeoDirectory()));
-                    }
-                }, new Runnable() {
-                    @Override
-                    public void run() {
-                        progress.dismiss();
-                        showExtCgeoDirChooser(usedBytes.get());
-                    }
-                });
-                return true;
-            }
+        dataDirPref.setOnPreferenceClickListener(preference -> {
+            final ProgressDialog progress = ProgressDialog.show(SettingsActivity.this, getString(R.string.calculate_dataDir_title), getString(R.string.calculate_dataDir), true, false);
+            AndroidRxUtils.andThenOnUi(Schedulers.io(), () -> {
+                // calculate disk usage
+                usedBytes.set(FileUtils.getSize(LocalStorage.getExternalPrivateCgeoDirectory()));
+            }, () -> {
+                progress.dismiss();
+                showExtCgeoDirChooser(usedBytes.get());
+            });
+            return true;
         });
 
     }
@@ -319,7 +325,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
             directories.add(dir.getAbsolutePath());
         }
 
-        final AlertDialog.Builder builder = new AlertDialog.Builder(SettingsActivity.this);
+        final AlertDialog.Builder builder = Dialogs.newBuilder(SettingsActivity.this);
         builder.setTitle(getString(R.string.settings_title_data_dir_usage, Formatter.formatBytes(usedBytes)));
         builder.setSingleChoiceItems(new ArrayAdapter<CharSequence>(SettingsActivity.this,
                                         android.R.layout.simple_list_item_single_choice,
@@ -329,6 +335,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                 return false;
             }
 
+            @SuppressWarnings("null")
             @NonNull
             @Override
             public View getView(final int position, @Nullable final View convertView, @NonNull final ViewGroup parent) {
@@ -341,29 +348,18 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
             public boolean isEnabled(final int position) {
                 return usedBytes < freeSpaces.get(position);
             }
-        }, selectedDirIndex, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(final DialogInterface dialog, final int itemId) {
-                Dialogs.confirm(SettingsActivity.this, R.string.confirm_data_dir_move_title, R.string.confirm_data_dir_move, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(final DialogInterface dialog, final int which) {
-                        final File dir = extDirs.get(itemId);
-                        if (!StringUtils.equals(currentExtDir, dir.getAbsolutePath())) {
-                            LocalStorage.changeExternalPrivateCgeoDir(SettingsActivity.this, dir.getAbsolutePath());
-                        }
-                        Settings.setExternalPrivateCgeoDirectory(dir.getAbsolutePath());
-                        onPreferenceChange(getPreference(R.string.pref_fakekey_dataDir), dir.getAbsolutePath());
-                    }
-                });
-                dialog.dismiss();
-            }
+        }, selectedDirIndex, (dialog, itemId) -> {
+            Dialogs.confirm(SettingsActivity.this, R.string.confirm_data_dir_move_title, R.string.confirm_data_dir_move, (dialog1, which) -> {
+                final File dir = extDirs.get(itemId);
+                if (!StringUtils.equals(currentExtDir, dir.getAbsolutePath())) {
+                    LocalStorage.changeExternalPrivateCgeoDir(SettingsActivity.this, dir.getAbsolutePath());
+                }
+                Settings.setExternalPrivateCgeoDirectory(dir.getAbsolutePath());
+                onPreferenceChange(getPreference(R.string.pref_fakekey_dataDir), dir.getAbsolutePath());
+            });
+            dialog.dismiss();
         });
-        builder.setNegativeButton(string.cancel, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(final DialogInterface dialog, final int which) {
-                dialog.cancel();
-            }
-        });
+        builder.setNegativeButton(string.cancel, (dialog, which) -> dialog.cancel());
         builder.create().show();
     }
 
@@ -402,24 +398,18 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         for (final DirChooserType dct : DirChooserType.values()) {
 
             getPreference(dct.keyId).setOnPreferenceClickListener(
-                    new OnPreferenceClickListener() {
-                        @Override
-                        public boolean onPreferenceClick(final Preference preference) {
-                            startDirChooser(dct);
-                            return false;
-                        }
+                    preference -> {
+                        startDirChooser(dct);
+                        return false;
                     });
         }
 
         getPreference(R.string.pref_mapDirectory).setOnPreferenceClickListener(
-                new OnPreferenceClickListener() {
-                    @Override
-                    public boolean onPreferenceClick(final Preference preference) {
-                        final Intent intent = new Intent(SettingsActivity.this,
-                                SelectMapfileActivity.class);
-                        startActivityForResult(intent, R.string.pref_mapDirectory);
-                        return false;
-                    }
+                preference -> {
+                    final Intent intent = new Intent(SettingsActivity.this,
+                            SelectMapfileActivity.class);
+                    startActivityForResult(intent, R.string.pref_mapDirectory);
+                    return false;
                 });
     }
 
@@ -445,7 +435,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
             dirChooser.putExtra(FileManagerIntents.EXTRA_BUTTON_TEXT,
                     getString(string.ok));
             startActivityForResult(dirChooser, dct.requestCode);
-        } catch (final ActivityNotFoundException ignored) {
+        } catch (final RuntimeException ignored) {
             // OI file manager not available
             final Intent dirChooser = new Intent(this, SimpleDirChooser.class);
             dirChooser.putExtra(Intents.EXTRA_START_DIR, startDirectory);
@@ -467,66 +457,64 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
     }
 
     private void initBackupButtons() {
-        final Preference backup = getPreference(R.string.pref_fakekey_preference_backup);
-        backup.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                DatabaseBackupUtils.createBackup(SettingsActivity.this, new Runnable() {
 
-                    @Override
-                    public void run() {
-                        onPreferenceChange(getPreference(R.string.pref_fakekey_preference_backup_info), "");
-                    }
-                });
-                return true;
-            }
+        final Preference backup = getPreference(R.string.pref_fakekey_preference_backup);
+        backup.setOnPreferenceClickListener(preference -> {
+            backupUtils.backup(() -> onPreferenceChange(getPreference(R.string.pref_fakekey_preference_restore), ""));
+            return true;
         });
 
         final Preference restore = getPreference(R.string.pref_fakekey_preference_restore);
-        restore.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                DatabaseBackupUtils.restoreDatabase(SettingsActivity.this);
-                return true;
-            }
+        restore.setOnPreferenceClickListener(preference -> {
+            backupUtils.restore(BackupUtils.newestBackupFolder());
+            return true;
         });
+
+        final CheckBoxPreference loginData = (CheckBoxPreference) getPreference(R.string.pref_backup_logins);
+        loginData.setOnPreferenceClickListener(preference -> {
+            if (Settings.getBackupLoginData()) {
+                loginData.setChecked(false);
+                Dialogs.confirm(SettingsActivity.this, R.string.init_backup_settings_logins, R.string.init_backup_settings_backup_full_confirm, (dialog, which) -> loginData.setChecked(true));
+            }
+            return true;
+        });
+
+        backupUtils.moveBackupIntoNewFolderStructureIfNeeded();
+        onPreferenceChange(getPreference(R.string.pref_fakekey_preference_restore), "");
+
+        final BackupSeekbarPreference keepOld = (BackupSeekbarPreference) getPreference(R.string.pref_backups_backup_history_length);
+
+        keepOld.setOnPreferenceChangeListener((preference, value) -> {
+            backupUtils.deleteBackupHistoryDialog((BackupSeekbarPreference) preference, (int) value);
+            return true;
+        });
+
     }
 
     private void initMaintenanceButtons() {
         final Preference dirMaintenance = getPreference(R.string.pref_fakekey_preference_maintenance_directories);
-        dirMaintenance.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                // disable the button, as the cleanup runs in background and should not be invoked a second time
-                preference.setEnabled(false);
+        dirMaintenance.setOnPreferenceClickListener(preference -> {
+            // disable the button, as the cleanup runs in background and should not be invoked a second time
+            preference.setEnabled(false);
 
-                final Resources res = getResources();
-                final SettingsActivity activity = SettingsActivity.this;
-                final ProgressDialog dialog = ProgressDialog.show(activity, res.getString(R.string.init_maintenance), res.getString(R.string.init_maintenance_directories), true, false);
-                AndroidRxUtils.andThenOnUi(Schedulers.io(), new Runnable() {
-                    @Override
-                    public void run() {
-                        DataStore.removeObsoleteGeocacheDataDirectories();
-                    }
-                }, new Runnable() {
-                    @Override
-                    public void run() {
-                        dialog.dismiss();
-                    }
-                });
-                return true;
-                }
+            final Resources res = getResources();
+            final SettingsActivity activity = SettingsActivity.this;
+            final ProgressDialog dialog = ProgressDialog.show(activity, res.getString(R.string.init_maintenance), res.getString(R.string.init_maintenance_directories), true, false);
+            AndroidRxUtils.andThenOnUi(Schedulers.io(), DataStore::removeObsoleteGeocacheDataDirectories, dialog::dismiss);
+            return true;
             });
-        final Preference memoryDumpPref = getPreference(R.string.pref_memory_dump);
-        memoryDumpPref
-                .setOnPreferenceClickListener(new OnPreferenceClickListener() {
-                    @Override
-                    public boolean onPreferenceClick(
-                            final Preference preference) {
-                        DebugUtils.createMemoryDump(SettingsActivity.this);
-                        return true;
-                    }
-                });
+        getPreference(R.string.pref_memory_dump).setOnPreferenceClickListener(preference -> {
+            DebugUtils.createMemoryDump(SettingsActivity.this);
+            return true;
+        });
+        getPreference(R.string.pref_generate_logcat).setOnPreferenceClickListener(preference -> {
+            DebugUtils.createLogcat(SettingsActivity.this);
+            return true;
+        });
+        getPreference(R.string.pref_view_settings).setOnPreferenceClickListener(preference -> {
+            startActivity(new Intent(this, ViewSettingsActivity.class));
+            return true;
+        });
     }
 
     private static void initDeviceSpecificPreferences() {
@@ -534,6 +522,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         // will get the appropriate ones.
         Settings.setUseHardwareAcceleration(Settings.useHardwareAcceleration());
         Settings.setUseGooglePlayServices(Settings.useGooglePlayServices());
+        Settings.setIsTransparentBackground(Settings.isTransparentBackground());
     }
 
     private static void initUnitPreferences() {
@@ -543,71 +532,70 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
     private void initDbLocationPreference() {
         final Preference p = getPreference(R.string.pref_dbonsdcard);
         p.setPersistent(false);
-        p.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                final boolean oldValue = Settings.isDbOnSDCard();
-                DataStore.moveDatabase(SettingsActivity.this);
-                return oldValue != Settings.isDbOnSDCard();
-            }
+        p.setOnPreferenceClickListener(preference -> {
+            final boolean oldValue = Settings.isDbOnSDCard();
+            DataStore.moveDatabase(SettingsActivity.this);
+            return oldValue != Settings.isDbOnSDCard();
         });
     }
 
     private void initDebugPreference() {
         final Preference p = getPreference(R.string.pref_debug);
-        p.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(final Preference preference, final Object newValue) {
-                Log.setDebug((Boolean) newValue);
-                return true;
-            }
+        p.setOnPreferenceChangeListener((preference, newValue) -> {
+            Log.setDebug((Boolean) newValue);
+            return true;
         });
     }
 
     private void initForceOrientationSensorPreference() {
         final Preference p = getPreference(R.string.pref_force_orientation_sensor);
-        p.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(final Preference preference, final Object newValue) {
-                final boolean useOrientationSensor = (Boolean) newValue;
-                Settings.setForceOrientationSensor(useOrientationSensor);
-                Sensors.getInstance().setupDirectionObservable();
-                return true;
-            }
+        p.setOnPreferenceChangeListener((preference, newValue) -> {
+            final boolean useOrientationSensor = (Boolean) newValue;
+            Settings.setForceOrientationSensor(useOrientationSensor);
+            Sensors.getInstance().setupDirectionObservable();
+            return true;
         });
         p.setEnabled(OrientationProvider.hasOrientationSensor(this) && RotationProvider.hasRotationSensor(this));
     }
 
     private void initLanguagePreferences() {
-        final Preference p = getPreference(R.string.pref_useenglish);
-        p.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(final Preference preference, final Object newValue) {
-                setResult(RESTART_NEEDED);
-                return true;
-            }
+        final String[] entries = new String[BuildConfig.TRANSLATION_ARRAY.length + 1];
+        final String[] entryValues = new String[BuildConfig.TRANSLATION_ARRAY.length + 1];
+        final Locale currentLocale = Settings.getApplicationLocale();
+
+        entries[0] = getString(R.string.init_use_default_language);
+        entryValues[0] = "";
+        for (int i = 0; i < BuildConfig.TRANSLATION_ARRAY.length; i++) {
+            entryValues[1 + i] = BuildConfig.TRANSLATION_ARRAY[i];
+            final Locale l = new Locale(BuildConfig.TRANSLATION_ARRAY[i], "");
+            entries[1 + i] = BuildConfig.TRANSLATION_ARRAY[i] + " (" + l.getDisplayLanguage(currentLocale) + ")";
+        }
+
+        final ListPreference selectedLanguage = (ListPreference) getPreference(R.string.pref_selected_language);
+        selectedLanguage.setEntries(entries);
+        selectedLanguage.setEntryValues(entryValues);
+    }
+
+    private void initMapPreferences() {
+        getPreference(R.string.pref_bigSmileysOnMap).setOnPreferenceChangeListener((preference, newValue) -> {
+            setResult(RESTART_NEEDED);
+            return true;
         });
     }
 
     private void initGeoDirPreferences() {
         final Sensors sensors = Sensors.getInstance();
         final Preference playServices = getPreference(R.string.pref_googleplayservices);
-        playServices.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(final Preference preference, final Object newValue) {
-                sensors.setupGeoDataObservables((Boolean) newValue, Settings.useLowPowerMode());
-                return true;
-            }
+        playServices.setOnPreferenceChangeListener((preference, newValue) -> {
+            sensors.setupGeoDataObservables((Boolean) newValue, Settings.useLowPowerMode());
+            return true;
         });
         playServices.setEnabled(GooglePlayServices.isAvailable());
-        getPreference(R.string.pref_lowpowermode).setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(final Preference preference, final Object newValue) {
-                final boolean useLowPower = (Boolean) newValue;
-                sensors.setupGeoDataObservables(Settings.useGooglePlayServices(), useLowPower);
-                sensors.setupDirectionObservable();
-                return true;
-            }
+        getPreference(R.string.pref_lowpowermode).setOnPreferenceChangeListener((preference, newValue) -> {
+            final boolean useLowPower = (Boolean) newValue;
+            sensors.setupGeoDataObservables(Settings.useGooglePlayServices(), useLowPower);
+            sensors.setupDirectionObservable();
+            return true;
         });
     }
 
@@ -662,7 +650,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                 final OCPreferenceKeys key = OCPreferenceKeys.getByAuthId(prefKeyId);
                 if (key != null) {
                     setOCAuthTitle(key);
-                    setConnectedTitle(prefKeyId, Settings.hasOCAuthorization(key.publicTokenPrefId, key.privateTokenPrefId));
+                    setConnectedTitle(prefKeyId, Settings.hasOAuthAuthorization(key.publicTokenPrefId, key.privateTokenPrefId));
                 } else {
                     setConnectedTitle(prefKeyId, false);
                 }
@@ -670,6 +658,10 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
             case R.string.pref_fakekey_ec_authorization:
                 setAuthTitle(prefKeyId, ECConnector.getInstance());
                 setConnectedUsernameTitle(prefKeyId, ECConnector.getInstance());
+                break;
+            case R.string.pref_fakekey_su_authorization:
+                setSuAuthTitle();
+                setConnectedTitle(prefKeyId, Settings.hasOAuthAuthorization(R.string.pref_su_tokenpublic, R.string.pref_su_tokensecret));
                 break;
             case R.string.pref_fakekey_gcvote_authorization:
                 setAuthTitle(prefKeyId, GCVote.getInstance());
@@ -690,7 +682,14 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
 
     private void setOCAuthTitle(final OCPreferenceKeys key) {
         getPreference(key.authPrefId)
-                .setTitle(getString(Settings.hasOCAuthorization(key.publicTokenPrefId, key.privateTokenPrefId)
+                .setTitle(getString(Settings.hasOAuthAuthorization(key.publicTokenPrefId, key.privateTokenPrefId)
+                        ? R.string.settings_reauthorize
+                        : R.string.settings_authorize));
+    }
+
+    private void setSuAuthTitle() {
+        getPreference(R.string.pref_fakekey_su_authorization)
+                .setTitle(getString(Settings.hasOAuthAuthorization(R.string.pref_su_tokenpublic, R.string.pref_su_tokensecret)
                         ? R.string.settings_reauthorize
                         : R.string.settings_authorize));
     }
@@ -743,7 +742,17 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
     @Override
     protected void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (MapDownloadUtils.onActivityResult(this, requestCode, resultCode, data)) {
+            return;
+        }
+
         if (resultCode != RESULT_OK) {
+            return;
+        }
+
+        if (requestCode == DirChooserType.BACKUP_DIR.requestCode) {
+            backupUtils.restore(new File(data.getData().getPath()));
             return;
         }
 
@@ -760,22 +769,11 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                     final String mapFile = data.getStringExtra(Intents.EXTRA_MAP_FILE);
                     final File file = new File(mapFile);
                     if (!file.isDirectory()) {
-                        Settings.setMapFile(mapFile);
-                        if (!Settings.isValidMapFile(Settings.getMapFile())) {
-                            ActivityMixin.showToast(this, R.string.warn_invalid_mapfile);
-                        } else {
-                            // Ensure map source preference is updated accordingly.
-                            // TODO: There should be a better way to find and select the map source for a map file
-                            final Integer mapSourceId = mapFile.hashCode();
-                            final ListPreference mapSource = (ListPreference) getPreference(R.string.pref_mapsource);
-                            mapSource.setValue(mapSourceId.toString());
-                            onPreferenceChange(mapSource, mapSourceId);
-                        }
+                        Settings.setMapFileDirectory(file.getParent());
                     } else {
                         Settings.setMapFileDirectory(mapFile);
                     }
                 }
-                initMapSourcePreference();
                 getPreference(R.string.pref_mapDirectory).setSummary(StringUtils.defaultString(Settings.getMapFileDirectory()));
                 break;
             case R.string.pref_fakekey_dataDir:
@@ -790,7 +788,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                 final OCPreferenceKeys key = OCPreferenceKeys.getByAuthId(requestCode);
                 if (key != null) {
                     setOCAuthTitle(key);
-                    setConnectedTitle(requestCode, Settings.hasOCAuthorization(key.publicTokenPrefId, key.privateTokenPrefId));
+                    setConnectedTitle(requestCode, Settings.hasOAuthAuthorization(key.publicTokenPrefId, key.privateTokenPrefId));
                     redrawScreen(key.prefScreenId);
                 } else {
                     setConnectedTitle(requestCode, false);
@@ -822,6 +820,11 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
                 setConnectedTitle(requestCode, Settings.hasGeokretyAuthorization());
                 redrawScreen(R.string.preference_screen_geokrety);
                 break;
+            case R.string.pref_fakekey_su_authorization:
+                setSuAuthTitle();
+                setConnectedTitle(requestCode, Settings.hasOAuthAuthorization(R.string.pref_su_tokenpublic, R.string.pref_su_tokensecret));
+                redrawScreen(R.string.preference_screen_su);
+                break;
             default:
                 throw new IllegalArgumentException();
         }
@@ -836,8 +839,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
             // reset the cached map source
             MapSource mapSource;
             try {
-                final int mapSourceId = Integer.parseInt(stringValue);
-                mapSource = MapProviderFactory.getMapSource(mapSourceId);
+                mapSource = MapProviderFactory.getMapSource(stringValue);
             } catch (final NumberFormatException e) {
                 Log.e("SettingsActivity.onPreferenceChange: bad source id '" + stringValue + "'", e);
                 mapSource = null;
@@ -888,20 +890,24 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
             final ListPreference listPreference = (ListPreference) preference;
             final int index = listPreference.findIndexOfValue(stringValue);
 
+            if (isPreference(preference, R.string.pref_selected_language)) {
+                setResult(RESTART_NEEDED);
+            }
+
             // Set the summary to reflect the new value.
             preference.setSummary(
                     index >= 0
-                            ? listPreference.getEntries()[index]
+                            ? (isPreference(preference, R.string.pref_selected_language) ? getString(R.string.init_summary_select_language) : "") + listPreference.getEntries()[index]
                             : null);
-        } else if (isPreference(preference, R.string.pref_fakekey_preference_backup_info)) {
-            final String text;
-            if (DatabaseBackupUtils.hasBackup()) {
-                text = preference.getContext().getString(R.string.init_backup_last) + " "
-                        + DatabaseBackupUtils.getBackupDateTime();
+        } else if (isPreference(preference, R.string.pref_fakekey_preference_restore)) {
+            final String textRestore;
+            if (BackupUtils.hasBackup(BackupUtils.newestBackupFolder())) {
+                textRestore = preference.getContext().getString(R.string.init_backup_last) + " "
+                        + BackupUtils.getNewestBackupDateTime();
             } else {
-                text = preference.getContext().getString(R.string.init_backup_last_no);
+                textRestore = preference.getContext().getString(R.string.init_backup_last_no);
             }
-            preference.setSummary(text);
+            preference.setSummary(textRestore);
         } else if (isPreference(preference, R.string.pref_ratingwanted)) {
             preferenceManager.findPreference(getKey(R.string.preference_screen_gcvote)).setSummary(getServiceSummary((Boolean) value));
             redrawScreen(preferenceManager.findPreference(getKey(R.string.preference_screen_services)));
@@ -981,7 +987,7 @@ public class SettingsActivity extends PreferenceActivity implements Preference.O
         super.setPreferenceScreen(preferenceScreen);
     }
 
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings({"deprecation", "EmptyMethod"})
     @Override
     public PreferenceManager getPreferenceManager() {
         // TODO replace with fragment based code

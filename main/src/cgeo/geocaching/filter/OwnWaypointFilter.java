@@ -6,13 +6,14 @@ import cgeo.geocaching.models.Waypoint;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Filter {@link Geocache}s if they have a user defined {@link Waypoint}.
+ * Filter {@link Geocache}s if they have a user-defined {@link Waypoint}.
  *
  */
 public class OwnWaypointFilter extends AbstractFilter implements IFilterFactory {
@@ -51,6 +52,6 @@ public class OwnWaypointFilter extends AbstractFilter implements IFilterFactory 
     @Override
     @NonNull
     public List<IFilter> getFilters() {
-        return Collections.<IFilter> singletonList(this);
+        return Collections.singletonList(this);
     }
 }

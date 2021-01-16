@@ -2,14 +2,14 @@ package cgeo.geocaching.ui;
 
 import cgeo.geocaching.activity.AbstractViewPagerActivity.PageViewCreator;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * View creator which destroys the created view on every {@link #notifyDataSetChanged()}.
@@ -35,7 +35,7 @@ public abstract class AbstractCachingPageViewCreator<ViewClass extends View> imp
 
     @Override
     @SuppressFBWarnings("USM_USELESS_ABSTRACT_METHOD")
-    public abstract ViewClass getDispatchedView(final ViewGroup parentView);
+    public abstract ViewClass getDispatchedView(ViewGroup parentView);
 
     /**
      * Gets the state of the view but returns an empty state if not overridden

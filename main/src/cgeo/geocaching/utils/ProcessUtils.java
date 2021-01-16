@@ -1,24 +1,27 @@
 package cgeo.geocaching.utils;
 
 import cgeo.geocaching.CgeoApplication;
-import cgeo.geocaching.R;
-import cgeo.geocaching.activity.ActivityMixin;
 
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.List;
 
 import org.apache.commons.collections4.CollectionUtils;
 
 public final class ProcessUtils {
+
+    public static final String CHROME_PACKAGE_NAME = "com.android.chrome";
 
     private ProcessUtils() {
         // utility class
@@ -31,6 +34,18 @@ public final class ProcessUtils {
     public static boolean isLaunchable(@Nullable final String packageName) {
         return getLaunchIntent(packageName) != null;
     }
+
+    public static boolean isChromeLaunchable() {
+        return ProcessUtils.isLaunchable(CHROME_PACKAGE_NAME);
+    }
+
+    public static List<ResolveInfo> getInstalledBrowsers(final Context context) {
+        // We're using "https://example.com" as we only want to query for web browsers, not c:geo or other apps
+        final Intent browserIntent = new Intent("android.intent.action.VIEW", Uri.parse("https://example.com"));
+        return context.getPackageManager().queryIntentActivities(browserIntent, PackageManager.MATCH_DEFAULT_ONLY);
+    }
+
+
 
     /**
      * Checks whether a launch intent is available or if the package is just installed
@@ -106,27 +121,45 @@ public final class ProcessUtils {
         return CollectionUtils.isNotEmpty(list) || CollectionUtils.isNotEmpty(servicesList);
     }
 
-    @SuppressWarnings("deprecation")
     public static void openMarket(final Activity activity, @NonNull final String packageName) {
         try {
             final String url = "market://details?id=" + packageName;
             final Intent marketIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-            marketIntent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY | Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+            marketIntent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY | Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
             activity.startActivity(marketIntent);
 
         } catch (final RuntimeException ignored) {
             // market not available, fall back to browser
             final String uri = "https://play.google.com/store/apps/details?id=" + packageName;
-            openUri(uri, activity);
+            ShareUtils.openUrl(activity, uri);
         }
     }
 
-    public static void openUri(@NonNull final String uri, @NonNull final Activity activity) {
+    public static void restartApplication(final Context c) {
         try {
-            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(uri)));
-        } catch (final ActivityNotFoundException e) {
-            Log.e("Cannot find suitable activity", e);
-            ActivityMixin.showToast(activity, R.string.err_application_no);
+            if (c != null) {
+                final PackageManager pm = c.getPackageManager();
+                if (pm != null) {
+                    //create the intent with the default start activity for our application
+                    final Intent mStartActivity = pm.getLaunchIntentForPackage(c.getPackageName());
+                    if (mStartActivity != null) {
+                        mStartActivity.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                        // create a pending intent so the application is restarted after System.exit(0) was called.
+                        final PendingIntent mPendingIntent = PendingIntent.getActivity(c, 1633838708, mStartActivity, PendingIntent.FLAG_CANCEL_CURRENT);
+                        final AlarmManager mgr = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+                        mgr.set(AlarmManager.RTC, System.currentTimeMillis() + 100, mPendingIntent);
+                        System.exit(0);
+                    } else {
+                        Log.e("Was not able to restart application, mStartActivity null");
+                    }
+                } else {
+                    Log.e("Was not able to restart application, PM null");
+                }
+            } else {
+                Log.e("Was not able to restart application, Context null");
+            }
+        } catch (Exception ex) {
+            Log.e("Was not able to restart application");
         }
     }
 

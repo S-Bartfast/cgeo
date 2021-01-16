@@ -9,21 +9,26 @@
 
     <style name="cgeo_main.base" parent="@style/Theme.AppCompat">
 
-        <!-- copy the style elements of the Wallpaper theme since AppCompat has no Wallpaper theme -->
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:colorBackgroundCacheHint">@null</item>
-        <item name="android:windowShowWallpaper">true</item>
+        <item name="colorAccent">@color/colorAccent</item>
 
         <!-- system elements -->
         <item name="android:windowContentOverlay">@null</item>
         <item name="actionBarStyle">@style/cgeo_main.ActionBarStyle</item>
         <item name="android:actionBarStyle" tools:ignore="NewApi">@style/cgeo_main.ActionBarStyle</item>
 
-    </style>    
+    </style>
 
+    <style name="cgeo_main_transparent" parent="cgeo_main.base">
+
+        <!-- copy the style elements of the Wallpaper theme since AppCompat has no Wallpaper theme -->
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:windowShowWallpaper">true</item>
+
+        <item name="android:windowTranslucentNavigation">true</item>
+    </style>
 
     <style name="cgeo_main" parent="cgeo_main.base">
-        <!-- gets modified in v19 to add translucent window decoration -->
     </style>
 
     <style name="cgeo.Widget.AppCompat.Base.ProgressBar.Medium" parent="android:Widget.ProgressBar">
@@ -34,18 +39,37 @@
     </style>
 
 
-    <style name="cgeo.ActionBarStyle" parent="Widget.AppCompat.Base.ActionBar">
+    <style name="cgeo.ActionBarStyle" parent="@style/Widget.AppCompat.ActionBar">
+        <item name="indeterminateProgressStyle">@style/cgeo.Widget.AppCompat.Base.ProgressBar.Medium</item>
+        <item name="android:indeterminateProgressStyle" tools:ignore="NewApi">@style/cgeo.Widget.AppCompat.Base.ProgressBar.Medium</item>
+        <item name="android:titleTextStyle">@style/cgeo.ActionBarStyle.TitleTextStyle</item>
+        <item name="titleTextStyle">@style/cgeo.ActionBarStyle.TitleTextStyle</item>
+    </style>
+
+    <style name="cgeo.ActionBarStyle.TitleTextStyle" parent="@android:style/Widget.TextView">
+        <item name="android:textSize">18sp</item>
+    </style>
+
+    <style name="cgeo.ActionBarStyle.Light.Inverse" parent="@style/Widget.AppCompat.Light.ActionBar.Solid.Inverse">
         <item name="indeterminateProgressStyle">@style/cgeo.Widget.AppCompat.Base.ProgressBar.Medium</item>
         <item name="android:indeterminateProgressStyle" tools:ignore="NewApi">@style/cgeo.Widget.AppCompat.Base.ProgressBar.Medium</item>
     </style>
 
-
-    <style name="cgeo.ActionBarStyle.Light.Inverse" parent="Widget.AppCompat.Light.Base.ActionBar.Solid.Inverse">
-        <item name="indeterminateProgressStyle">@style/cgeo.Widget.AppCompat.Base.ProgressBar.Medium</item>
-        <item name="android:indeterminateProgressStyle" tools:ignore="NewApi">@style/cgeo.Widget.AppCompat.Base.ProgressBar.Medium</item>
+    <style name="cgeo_gmap" parent="@android:style/Theme.DeviceDefault">
+        <item name="text_color">@color/text_dark</item>
+        <item name="button">@drawable/action_button_dark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
     </style>
 
-   <style name="cgeo.base" parent="@style/Theme.AppCompat">
+    <style name="cgeo_gmap_light" parent="@android:style/Theme.DeviceDefault.Light.DarkActionBar">
+        <item name="text_color">@color/text_light</item>
+        <item name="button">@drawable/action_button_light</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="cgeo.base" parent="@style/Theme.AppCompat">
 
        <!-- For some reason we get a different text-size here (bug in abc?), explicitly set text styles -->
        <item name="titleTextStyle">@style/TextAppearance.AppCompat.Widget.ActionMode.Title</item>
@@ -55,6 +79,8 @@
        <item name="android:editTextStyle">@style/edittext</item>
        <item name="android:windowContentOverlay">@null</item>
        <item name="actionBarStyle">@style/cgeo.ActionBarStyle</item>
+
+        <item name="colorAccent">@color/colorAccent</item>
 
         <!-- own values: colors -->
         <item name="just_color">@color/just_black</item>
@@ -67,14 +93,16 @@
     <style name="cgeo.base.light" parent="@style/Theme.AppCompat.Light.DarkActionBar">
 
         <!-- For some reason we get the non inversed texts here (bug in abc?), explicitly set text styles -->
-        <item name="titleTextStyle">@style/TextAppearance.AppCompat.Widget.ActionMode.Title.Inverse</item>
-        <item name="subtitleTextStyle">@style/TextAppearance.AppCompat.Widget.ActionMode.Subtitle.Inverse</item>
+        <item name="titleTextStyle">@style/TextAppearance.AppCompat.Widget.ActionBar.Title.Inverse</item>
+        <item name="subtitleTextStyle">@style/TextAppearance.AppCompat.Widget.ActionBar.Subtitle.Inverse</item>
 
 
         <item name="android:buttonStyle">@style/button</item>
         <item name="android:editTextStyle">@style/edittext</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="actionBarStyle">@style/cgeo.ActionBarStyle.Light.Inverse</item>
+
+        <item name="colorAccent">@color/colorAccent</item>
 
         <!-- own values: colors -->
         <item name="just_color">@color/just_black</item>
@@ -90,27 +118,6 @@
     <style name="cgeo_light" parent="cgeo.base.light">
 
     </style>
-
-    <!-- Gingerbreads' Dialog style without the colors but with white background -->
-    <style name="DialogWindowTitle">
-        <item name="android:maxLines">1</item>
-        <item name="android:scrollHorizontally">true</item>
-        <item name="android:textAppearance">@android:style/TextAppearance.DialogWindowTitle</item>
-    </style>
-
-    <style name="DialogFixGingerbread">
-        <item name="android:windowFrame">@null</item>
-        <item name="android:windowTitleStyle">@style/DialogWindowTitle</item>
-        <item name="android:windowIsFloating">true</item>
-
-        <item name="android:windowBackground">@color/just_white</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:colorBackgroundCacheHint">@null</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
-        <item name="android:windowSoftInputMode">stateUnspecified|adjustPan</item>
-    </style>
-
-
 
 
     <style name="dark" parent="cgeo">
@@ -164,7 +171,7 @@
         <item name="compass">1</item>
     </style>
 
-    
+
     <style name="cgeo.Translucent.Light" parent="light">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackgroundCacheHint">@null</item>
@@ -183,6 +190,7 @@
 
     <style name="cgeo_popup" parent="cgeo.Translucent.Light">
         <item name="android:windowNoTitle">true</item>
+        <item name="colorAccent">@color/colorAccent</item>
      </style>
 
     <style name="popup_dark" parent="cgeo.Translucent">
@@ -190,8 +198,8 @@
 
     <style name="popup_light" parent="cgeo_popup">
     </style>
-    
-    <style name="settings" parent="@style/Theme.AppCompat">
+
+    <style name="settings" parent="@android:style/Theme.DeviceDefault">
         <item name="settings_cloud">@drawable/settings_cloud_white</item>
         <item name="settings_details">@drawable/settings_details_white</item>
         <item name="settings_eye">@drawable/settings_eye_white</item>
@@ -200,10 +208,17 @@
         <item name="settings_nut">@drawable/settings_nut_white</item>
         <item name="settings_pen">@drawable/settings_pen_white</item>
         <item name="settings_sdcard">@drawable/settings_sdcard_white</item>
+        <item name="settings_backup">@drawable/settings_backup_white</item>
         <item name="settings_info_icon">@drawable/settings_info_icon_white</item>
+        <item name="settings_map_icon">@drawable/settings_map_white</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:alertDialogTheme">@style/Dialog_Alert</item>
+        <item name="text_color">@color/text_dark</item>
+        <item name="button">@drawable/action_button_dark</item>
     </style>
 
-    <style name="settings.light" parent="@style/Theme.AppCompat.Light">
+    <style name="settings.light" parent="@android:style/Theme.DeviceDefault.Light.DarkActionBar">
         <item name="settings_cloud">@drawable/settings_cloud_black</item>
         <item name="settings_details">@drawable/settings_details_black</item>
         <item name="settings_eye">@drawable/settings_eye_black</item>
@@ -212,7 +227,32 @@
         <item name="settings_nut">@drawable/settings_nut_black</item>
         <item name="settings_pen">@drawable/settings_pen_black</item>
         <item name="settings_sdcard">@drawable/settings_sdcard_black</item>
+        <item name="settings_backup">@drawable/settings_backup_black</item>
         <item name="settings_info_icon">@drawable/settings_info_icon_black</item>
+        <item name="settings_map_icon">@drawable/settings_map_black</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:alertDialogTheme">@style/Dialog_Alert_light</item>
+        <item name="text_color">@color/text_light</item>
+        <item name="button">@drawable/action_button_light</item>
+    </style>
+
+    <style name="Dialog_Alert" parent="@style/Theme.AppCompat.Dialog.Alert">
+        <item name="text_color">@color/text_dark</item>
+        <item name="buttonBarButtonStyle">@style/button_borderless</item>
+        <item name="background">?android:attr/selectableItemBackground</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+
+    <style name="Dialog_Alert_light" parent="@style/Theme.AppCompat.Light.Dialog.Alert">
+        <item name="text_color">@color/text_light</item>
+        <item name="buttonBarButtonStyle">@style/button_borderless</item>
+        <item name="background">?android:attr/selectableItemBackground</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 
 </resources>

@@ -9,9 +9,13 @@
         <item name="android:singleLine">true</item>
         <item name="android:scrollHorizontally">true</item>
         <item name="android:ellipsize">marquee</item>
-        <item name="android:textSize">22sp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textColor">?text_color</item>
         <item name="android:background">?button</item>
+    </style>
+
+    <style name="button_borderless" parent="button">
+        <item name="android:background">?android:attr/selectableItemBackground</item>
     </style>
 
     <style name="edittext" parent="@android:style/Widget.EditText">
@@ -102,6 +106,17 @@
         <item name="android:layout_marginBottom">5dip</item>
     </style>
 
+    <!-- button: letter -->
+    <style name="button_letter" parent="button">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:minWidth">40sp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:layout_marginLeft">5dip</item>
+        <item name="android:layout_marginRight">5dip</item>
+        <item name="android:layout_marginBottom">5dip</item>
+    </style>
+
     <!-- button: digit -->
     <style name="button_digit" parent="button">
         <item name="android:padding">0dp</item>
@@ -111,7 +126,7 @@
         <item name="android:layout_marginRight">1dip</item>
         <item name="android:layout_marginTop">2dip</item>
         <item name="android:layout_marginBottom">2dip</item>
-        <item name="android:layout_columnWeight">1</item>
+        <item name="layout_columnWeight">1</item>
     </style>
 
     <!-- button: small -->
@@ -142,7 +157,7 @@
         <item name="android:layout_marginLeft">10dip</item>
         <item name="android:layout_marginRight">10dip</item>
         <item name="android:layout_marginBottom">5dip</item>
-        <item name="android:textColor">@color/text_dark</item>
+        <item name="android:textColor">?text_color</item>
         <item name="android:textColorHint">?text_color_hint</item>
         <item name="android:background">@drawable/input_bcg_dark</item>
     </style>
@@ -166,8 +181,7 @@
         <item name="android:paddingBottom">1dip</item>
         <item name="android:paddingLeft">5dip</item>
         <item name="android:paddingRight">5dip</item>
-        <item name="android:singleLine">true</item>
-        <item name="android:lines">1</item>
+        <item name="android:maxLines">2</item>
         <item name="android:ellipsize">marquee</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textColor">@color/text_icon</item>
@@ -180,9 +194,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_gravity">center_horizontal</item>
         <item name="android:layout_alignParentTop">true</item>
-        <item name="android:layout_alignParentRight">true</item>
-        <item name="android:layout_marginRight">4dip</item>
-        <item name="android:layout_marginLeft">4dip</item>
+        <item name="android:layout_centerHorizontal">true</item>
         <item name="android:gravity">center</item>
         <item name="android:paddingTop">2dip</item>
         <item name="android:paddingBottom">2dip</item>
@@ -197,16 +209,21 @@
         <item name="android:text"></item>
     </style>
     <style name="icon_mainscreen_cell_counter">
-        <item name="android:layout_width">74dip</item>
+        <item name="android:layout_gravity">center_horizontal</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">vertical</item>
     </style>
-    <style name="icon_mainscreen_cell" parent="icon_mainscreen_cell_counter">
-        <item name="android:layout_margin">4dip</item>
+    <style name="icon_mainscreen_cell">
+        <item name="android:layout_width">0dip</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
     </style>
     <style name="icon_mainscreen_row">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">fill_parent</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_margin">4dip</item>
         <item name="android:gravity">center_horizontal</item>
         <item name="android:orientation">horizontal</item>
@@ -253,6 +270,17 @@
     <style name="location_current_satellites" parent="location_current_style">
         <item name="android:layout_alignParentLeft">true</item>
         <item name="android:layout_gravity">left</item>
+    </style>
+
+    <!-- single degree -->
+    <style name="single_degree_style" parent="location_current_style">
+        <item name="android:textColor">?text_color_grey</item>
+        <item name="android:textAlignment">viewEnd</item>
+        <item name="android:width">40dip</item>
+        <item name="android:textIsSelectable">false</item>
+        <item name="android:paddingLeft">0dip</item>
+        <item name="android:paddingRight">0dip</item>
+        <item name="android:ellipsize">none</item>
     </style>
 
     <!-- separators -->
@@ -321,7 +349,7 @@
         <item name="android:layout_gravity">left|top</item>
         <item name="android:ellipsize">marquee</item>
         <item name="android:lines">1</item>
-        <item name="android:scrollHorizontally">true</item> 
+        <item name="android:scrollHorizontally">true</item>
         <item name="android:singleLine">true</item>
         <item name="android:textColor">?text_color</item>
         <item name="android:textSize">18sp</item>
@@ -359,5 +387,103 @@
         <item name="android:stepSize">0.5</item>
         <item name="android:isIndicator">true</item>
     </style>
-    
+
+    <!-- progress dialog theme -->
+    <style name="cgeoProgressdialogTheme" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:textColor">?text_color</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@drawable/border_straight</item>
+    </style>
+    <style name="cgeoProgressdialogTheme_light" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="android:textColor">?text_color</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@drawable/border_straight_light</item>
+    </style>
+
+    <!-- map progressbar style -->
+    <style name="map_progressbar" parent="@style/Widget.AppCompat.ProgressBar.Horizontal">
+        <item name="android:height">8dp</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:padding">0dp</item>
+        <item name="android:layout_marginTop">-4dp</item>
+    </style>
+
+    <!-- map distance info style -->
+    <style name="map_distanceinfo_no_background">
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingLeft">4dp</item>
+        <item name="android:paddingRight">4dp</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">right</item>
+        <item name="android:lines">1</item>
+        <item name="android:textColor">@color/text_icon</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:visibility">gone</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="map_distanceinfo" parent="map_distanceinfo_no_background">
+        <item name="android:background">@drawable/icon_bcg</item>
+    </style>
+
+    <style name="map_distanceinfo_supersize" parent="map_distanceinfo">
+        <item name="android:layout_marginLeft">-2dp</item>
+        <item name="android:textSize">72sp</item>
+        <item name="android:paddingTop">15dp</item>
+        <item name="android:layout_marginBottom">-10dp</item>
+        <item name="android:gravity">center_horizontal</item>
+    </style>
+
+    <!-- about c:geo contributors style -->
+    <style name="about_contributors">
+        <item name="android:layout_gravity">left</item>
+        <item name="android:layout_margin">7dip</item>
+        <item name="android:linksClickable">true</item>
+        <item name="android:paddingLeft">3dip</item>
+        <item name="android:textColor">?text_color</item>
+        <item name="android:textColorLink">?text_color_link</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- splash screen style -->
+    <style name="SplashScreenTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@drawable/splashscreen_background</item>
+        <item name="android:windowActivityTransitions">false</item>
+    </style>
+
+    <!-- installation wizard styles -->
+    <style name="InstallationWizardMarginsLR">
+        <item name="android:layout_marginLeft">16dp</item>
+        <item name="android:layout_marginRight">16dp</item>
+    </style>
+
+    <style name="InstallationWizardButtonFull" parent="InstallationWizardMarginsLR">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_centerHorizontal">true</item>
+        <item name="android:layout_marginTop">12dp</item>
+    </style>
+
+    <style name="InstallationWizardButtonFooter" parent="InstallationWizardMarginsLR">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_alignParentBottom">true</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
+    </style>
+
+    <style name="InstallationWizardTextViewBase" parent="InstallationWizardMarginsLR">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_centerHorizontal">true</item>
+        <item name="android:layout_marginTop">16dp</item>
+    </style>
+
+    <style name="InstallationWizardTextViewAdvanced" parent="InstallationWizardTextViewBase">
+        <item name="android:textSize">16sp</item>
+    </style>
+
 </resources>

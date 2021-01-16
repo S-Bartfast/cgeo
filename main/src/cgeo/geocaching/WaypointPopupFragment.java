@@ -1,19 +1,5 @@
 package cgeo.geocaching;
 
-import android.os.Bundle;
-import android.support.v4.app.DialogFragment;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.View.OnClickListener;
-import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-
-import org.apache.commons.lang3.StringUtils;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
 import cgeo.geocaching.apps.navi.NavigationAppFactory;
 import cgeo.geocaching.compatibility.Compatibility;
 import cgeo.geocaching.location.Geopoint;
@@ -21,13 +7,33 @@ import cgeo.geocaching.location.Units;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Waypoint;
 import cgeo.geocaching.sensors.GeoData;
+import cgeo.geocaching.speech.SpeechService;
 import cgeo.geocaching.storage.DataStore;
 import cgeo.geocaching.ui.CacheDetailsCreator;
 import cgeo.geocaching.utils.Log;
 
-public class WaypointPopupFragment extends AbstractDialogFragment {
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.fragment.app.DialogFragment;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import org.apache.commons.lang3.StringUtils;
+
+public class WaypointPopupFragment extends AbstractDialogFragmentWithProximityNotification {
     @BindView(R.id.actionbar_title) protected TextView actionBarTitle;
     @BindView(R.id.waypoint_details_list) protected LinearLayout waypointDetailsLayout;
+    @BindView(R.id.toggle_visited) protected CheckBox toggleVisited;
     @BindView(R.id.edit) protected Button buttonEdit;
     @BindView(R.id.details_list) protected LinearLayout cacheDetailsLayout;
 
@@ -52,6 +58,7 @@ public class WaypointPopupFragment extends AbstractDialogFragment {
 
     @Override
     protected void onUpdateGeoData(final GeoData geo) {
+        super.onUpdateGeoData(geo);
         if (waypoint != null) {
             final Geopoint coordinates = waypoint.getCoords();
             if (coordinates != null) {
@@ -66,6 +73,10 @@ public class WaypointPopupFragment extends AbstractDialogFragment {
         super.init();
 
         waypoint = DataStore.loadWaypoint(waypointId);
+        if (null != proximityNotification) {
+            proximityNotification.setReferencePoint(waypoint.getCoords());
+            proximityNotification.setTextNotifications(getContext());
+        }
 
         if (waypoint == null) {
             Log.e("WaypointPopupFragment.init: unable to get waypoint " + waypointId);
@@ -90,15 +101,25 @@ public class WaypointPopupFragment extends AbstractDialogFragment {
             //Waypoint geocode
             details.add(R.string.cache_geocode, waypoint.getPrefix() + waypoint.getGeocode().substring(2));
             waypointDistance = details.addDistance(waypoint, waypointDistance);
-            details.add(R.string.waypoint_note, waypoint.getNote());
+            final String note = waypoint.getNote();
+            if (StringUtils.isNotBlank(note)) {
+                details.addHtml(R.string.waypoint_note, note, waypoint.getGeocode());
+            }
+            final String userNote = waypoint.getUserNote();
+            if (StringUtils.isNotBlank(userNote)) {
+                details.addHtml(R.string.waypoint_user_note, userNote, waypoint.getGeocode());
+            }
 
-            buttonEdit.setOnClickListener(new OnClickListener() {
+            toggleVisited.setChecked(waypoint.isVisited());
+            toggleVisited.setOnClickListener(arg1 -> {
+                waypoint.setVisited(!waypoint.isVisited());
+                DataStore.saveWaypoint(waypoint.getId(), waypoint.getGeocode(), waypoint);
+                Toast.makeText(getActivity(), waypoint.isVisited() ? R.string.waypoint_set_visited : R.string.waypoint_unset_visited, Toast.LENGTH_SHORT).show();
+            });
 
-                @Override
-                public void onClick(final View arg0) {
-                    EditWaypointActivity.startActivityEditWaypoint(getActivity(), cache, waypoint.getId());
-                    getActivity().finish();
-                }
+            buttonEdit.setOnClickListener(arg0 -> {
+                EditWaypointActivity.startActivityEditWaypoint(getActivity(), cache, waypoint.getId());
+                getActivity().finish();
             });
 
             details = new CacheDetailsCreator(getActivity(), cacheDetailsLayout);
@@ -106,9 +127,31 @@ public class WaypointPopupFragment extends AbstractDialogFragment {
 
             addCacheDetails();
 
+            final View view = getView();
+            assert view != null;
+
         } catch (final Exception e) {
             Log.e("WaypointPopup.init", e);
         }
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull final MenuItem item) {
+        if (super.onOptionsItemSelected(item)) {
+            return true;
+        }
+
+        if (item.getItemId() == R.id.menu_tts_toggle) {
+            SpeechService.toggleService(getActivity(), waypoint.getCoords());
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void onDestroy() {
+        SpeechService.stopService(getActivity());
+        super.onDestroy();
     }
 
     @Override

@@ -3,14 +3,12 @@ package cgeo.geocaching.connector.ec;
 import cgeo.geocaching.R;
 import cgeo.geocaching.SearchResult;
 import cgeo.geocaching.connector.AbstractConnector;
-import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.ILoggingManager;
 import cgeo.geocaching.connector.capability.ICredentials;
 import cgeo.geocaching.connector.capability.ILogin;
 import cgeo.geocaching.connector.capability.ISearchByCenter;
 import cgeo.geocaching.connector.capability.ISearchByGeocode;
 import cgeo.geocaching.connector.capability.ISearchByViewPort;
-import cgeo.geocaching.connector.gc.MapTokens;
 import cgeo.geocaching.enumerations.StatusCode;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Viewport;
@@ -19,13 +17,13 @@ import cgeo.geocaching.log.LogType;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.settings.Credentials;
 import cgeo.geocaching.settings.Settings;
-import cgeo.geocaching.settings.SettingsActivity;
 import cgeo.geocaching.utils.DisposableHandler;
 
 import android.app.Activity;
 import android.os.Handler;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,9 +34,8 @@ import org.apache.commons.lang3.StringUtils;
 
 public class ECConnector extends AbstractConnector implements ISearchByGeocode, ISearchByCenter, ISearchByViewPort, ILogin, ICredentials {
 
-    // As of 2016-11-17, using https redirects to http
     @NonNull
-    private static final String CACHE_URL = "http://extremcaching.com/index.php/output-2/";
+    private static final String CACHE_URL = "https://extremcaching.com/index.php/output-2/";
 
     /**
      * Pattern for EC codes
@@ -108,10 +105,10 @@ public class ECConnector extends AbstractConnector implements ISearchByGeocode, 
 
     @Override
     @NonNull
-    public SearchResult searchByViewport(@NonNull final Viewport viewport, @Nullable final MapTokens tokens) {
+    public SearchResult searchByViewport(@NonNull final Viewport viewport) {
         final Collection<Geocache> caches = ECApi.searchByBBox(viewport);
         final SearchResult searchResult = new SearchResult(caches);
-        return searchResult.filterSearchResults(false, Settings.getCacheType());
+        return searchResult.filterSearchResults(false, false, Settings.getCacheType());
     }
 
     @Override
@@ -119,7 +116,7 @@ public class ECConnector extends AbstractConnector implements ISearchByGeocode, 
     public SearchResult searchByCenter(@NonNull final Geopoint center) {
         final Collection<Geocache> caches = ECApi.searchByCenter(center);
         final SearchResult searchResult = new SearchResult(caches);
-        return searchResult.filterSearchResults(false, Settings.getCacheType());
+        return searchResult.filterSearchResults(false, false, Settings.getCacheType());
     }
 
     @Override
@@ -143,15 +140,6 @@ public class ECConnector extends AbstractConnector implements ISearchByGeocode, 
         // login
         final StatusCode status = ecLogin.login();
 
-        if (ConnectorFactory.showLoginToast && handler != null) {
-            handler.sendMessage(handler.obtainMessage(0, status));
-            ConnectorFactory.showLoginToast = false;
-
-            // invoke settings activity to insert login details
-            if (status == StatusCode.NO_LOGIN_INFO_STORED && fromActivity != null) {
-                SettingsActivity.openForScreen(R.string.preference_screen_ec, fromActivity);
-            }
-        }
         return status == StatusCode.NO_ERROR;
     }
 

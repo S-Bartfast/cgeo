@@ -7,11 +7,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.TestCase;
+import org.junit.Test;
 
-public class DistanceComparatorTest extends TestCase {
+public class DistanceComparatorTest {
 
-    public static void testCompareCaches() {
+    @Test
+    public void testCompareCaches() {
         final List<Geocache> caches = new ArrayList<>();
         for (int i = 0; i < 37; i++) {
             final Geocache cache = new Geocache();

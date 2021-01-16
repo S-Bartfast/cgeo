@@ -1,17 +1,17 @@
 package cgeo.geocaching.connector.gc;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Viewport;
 
 import java.util.Set;
 
-import junit.framework.TestCase;
+import org.junit.Test;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
-public class AutoZoomTest extends TestCase {
+public class AutoZoomTest {
 
-    public static void testZoom1() {
+    @Test
+    public void testZoom1() {
         final Geopoint bottomLeft = new Geopoint(49.3, 8.3);
         final Geopoint topRight = new Geopoint(49.4, 8.4);
 
@@ -27,7 +27,8 @@ public class AutoZoomTest extends TestCase {
 
     }
 
-    public static void testZoom2() {
+    @Test
+    public void testZoom2() {
         final Geopoint bottomLeft = new Geopoint(49.3, 8.3);
         final Geopoint topRight = new Geopoint(49.4, 8.4);
 
@@ -43,7 +44,8 @@ public class AutoZoomTest extends TestCase {
 
     }
 
-    public static void testTiles1x2() {
+    @Test
+    public void testTiles1x2() {
         final Geopoint bottomLeft = new Geopoint(49.3, 8.3);
         final Geopoint topRight = new Geopoint(49.4, 8.4);
 
@@ -52,7 +54,8 @@ public class AutoZoomTest extends TestCase {
         assertThat(tiles).hasSize(2);
     }
 
-    public static void testTiles2x3() {
+    @Test
+    public void testTiles2x3() {
         final Geopoint bottomLeft = new Geopoint(49.3, 8.3);
         final Geopoint topRight = new Geopoint(49.4, 8.4);
 
@@ -61,7 +64,8 @@ public class AutoZoomTest extends TestCase {
         assertThat(tiles).hasSize(6);
     }
 
-    public static void testTilesZoom13() {
+    @Test
+    public void testTilesZoom13() {
         final Geopoint bottomLeft = new Geopoint(49.3, 8.3);
         final Geopoint topRight = new Geopoint(49.4, 8.4);
 

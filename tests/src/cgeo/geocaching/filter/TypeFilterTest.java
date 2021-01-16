@@ -1,23 +1,22 @@
 package cgeo.geocaching.filter;
 
-import junit.framework.TestCase;
+import cgeo.geocaching.enumerations.CacheType;
+import cgeo.geocaching.models.Geocache;
 
 import java.util.ArrayList;
 
-import cgeo.geocaching.models.Geocache;
-import cgeo.geocaching.enumerations.CacheType;
-
+import org.junit.Before;
+import org.junit.Test;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
-public class TypeFilterTest extends TestCase {
+public class TypeFilterTest {
 
     private TypeFilter traditionalFilter;
     private Geocache traditional;
     private Geocache mystery;
 
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
+    @Before
+    public void setUp() throws Exception {
         traditionalFilter = new TypeFilter(CacheType.TRADITIONAL);
 
         traditional = new Geocache();
@@ -27,11 +26,13 @@ public class TypeFilterTest extends TestCase {
         mystery.setType(CacheType.MYSTERY);
     }
 
+    @Test
     public void testAccepts() {
         assertThat(traditionalFilter.accepts(traditional)).isTrue();
         assertThat(traditionalFilter.accepts(mystery)).isFalse();
     }
 
+    @Test
     public void testFilter() {
         final ArrayList<Geocache> list = new ArrayList<>();
         traditionalFilter.filter(list);
@@ -46,7 +47,8 @@ public class TypeFilterTest extends TestCase {
 
     }
 
-    public static void testGetAllFilters() {
+    @Test
+    public void testGetAllFilters() {
         final int expectedEntries = CacheType.values().length - 1; // hide "all"
         assertThat(new TypeFilter.Factory().getFilters()).hasSize(expectedEntries);
     }

@@ -2,7 +2,7 @@ package cgeo.geocaching.connector.capability;
 
 import cgeo.geocaching.connector.IConnector;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.io.File;
 
@@ -14,5 +14,5 @@ public interface FieldNotesCapability extends IConnector {
     /**
      * return {@code true} if uploaded successfully
      */
-    boolean uploadFieldNotes(@NonNull final File exportFile);
+    boolean uploadFieldNotes(@NonNull File exportFile);
 }

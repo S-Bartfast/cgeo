@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <TextView
+        android:id="@+id/target"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:layout_marginLeft="-2dp"
+        android:layout_marginRight="97dp"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:layout_width="wrap_content"
+        style="@style/map_distanceinfo"
+        android:gravity="left" />
+
+    <TextView
+        android:id="@+id/distance1"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:layout_width="95dp"
+        style="@style/map_distanceinfo" />
+
+    <TextView
+        android:id="@+id/distance2"
+        android:layout_marginTop="0dp"
+        android:layout_below="@id/distance1"
+        android:layout_alignParentRight="true"
+        android:layout_width="95dp"
+        style="@style/map_distanceinfo" />
+
+    <TextView
+        android:id="@+id/distance3"
+        android:layout_marginTop="0dp"
+        android:layout_below="@id/distance2"
+        android:layout_alignParentRight="true"
+        android:layout_width="95dp"
+        style="@style/map_distanceinfo" />
+
+    <TextView
+        android:id="@+id/distanceSupersize"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_alignParentTop="true"
+        app:autoSizeTextType="uniform"
+        app:autoSizeMinTextSize="64sp"
+        app:autoSizeMaxTextSize="120sp"
+        app:autoSizeStepGranularity="2sp"
+        style="@style/map_distanceinfo_supersize" />
+
+    <TextView
+        android:id="@+id/targetSupersize"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:layout_marginLeft="-2dp"
+        android:layout_marginRight="97dp"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:layout_width="wrap_content"
+        style="@style/map_distanceinfo_no_background"
+        android:gravity="left" />
+
+    <TextView
+        android:id="@+id/distance1Supersize"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:layout_width="95dp"
+        style="@style/map_distanceinfo_no_background" />
+
+    <TextView
+        android:id="@+id/distance2Supersize"
+        android:layout_marginTop="10dp"
+        android:layout_below="@id/distanceSupersize"
+        android:layout_alignParentRight="true"
+        android:layout_width="95dp"
+        style="@style/map_distanceinfo" />
+
+</RelativeLayout>

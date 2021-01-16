@@ -6,14 +6,15 @@ import cgeo.geocaching.network.Network;
 import cgeo.geocaching.network.Parameters;
 import cgeo.geocaching.settings.Credentials;
 import cgeo.geocaching.settings.Settings;
-import cgeo.geocaching.utils.Charsets;
 import cgeo.geocaching.utils.Log;
 
+import androidx.annotation.NonNull;
+
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 
@@ -55,7 +56,7 @@ public class GCVoteLogin extends AbstractLogin {
         try {
             final XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
             final XmlPullParser xpp = factory.newPullParser();
-            xpp.setInput(response, Charsets.UTF_8.name());
+            xpp.setInput(response, StandardCharsets.UTF_8.name());
             int eventType = xpp.getEventType();
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 if (eventType == XmlPullParser.START_TAG) {

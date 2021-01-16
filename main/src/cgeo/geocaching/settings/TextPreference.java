@@ -1,7 +1,5 @@
 package cgeo.geocaching.settings;
 
-import butterknife.ButterKnife;
-
 import cgeo.geocaching.R;
 
 import android.content.Context;
@@ -59,10 +57,10 @@ public class TextPreference extends AbstractAttributeBasedPreference {
 
         final View v = super.onCreateView(parent);
 
-        final TextView text = ButterKnife.findById(v, R.id.textPreferenceText);
+        final TextView text = v.findViewById(R.id.textPreferenceText);
         text.setText(this.text);
 
-        summaryView = ButterKnife.findById(v, R.id.textPreferenceSummary);
+        summaryView = v.findViewById(R.id.textPreferenceSummary);
         setSummary(null); // show saved summary text
 
         return v;

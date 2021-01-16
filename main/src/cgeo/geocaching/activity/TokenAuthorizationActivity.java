@@ -19,13 +19,14 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.support.annotation.NonNull;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
 
 import java.util.regex.Pattern;
 
@@ -126,6 +127,7 @@ public abstract class TokenAuthorizationActivity extends AbstractActivity {
 
     @Override
     public void onNewIntent(final Intent intent) {
+        super.onNewIntent(intent);  // call super to make lint happy
         setIntent(intent);
     }
 
@@ -196,12 +198,7 @@ public abstract class TokenAuthorizationActivity extends AbstractActivity {
                 final String username = activity.usernameEditText.getText().toString();
                 final String password = activity.passwordEditText.getText().toString();
 
-                AndroidRxUtils.networkScheduler.scheduleDirect(new Runnable() {
-                    @Override
-                    public void run() {
-                        activity.requestToken(username, password);
-                    }
-                });
+                AndroidRxUtils.networkScheduler.scheduleDirect(() -> activity.requestToken(username, password));
             }
         }
     }
@@ -297,8 +294,8 @@ public abstract class TokenAuthorizationActivity extends AbstractActivity {
      *
      */
     protected void enableStartButtonIfReady() {
-        startButton.setEnabled(StringUtils.isNotEmpty(usernameEditText.getText().toString()) &&
-                StringUtils.isNotEmpty(passwordEditText.getText().toString()));
+        startButton.setEnabled(StringUtils.isNotEmpty(usernameEditText.getText()) &&
+                StringUtils.isNotEmpty(passwordEditText.getText()));
     }
 
     /**

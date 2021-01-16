@@ -16,8 +16,6 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -25,11 +23,11 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
-import java.util.concurrent.Callable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import butterknife.BindView;
-import io.reactivex.Observable;
-import io.reactivex.functions.Consumer;
+import io.reactivex.rxjava3.core.Observable;
 import org.apache.commons.lang3.StringUtils;
 
 public abstract class AbstractCredentialsAuthorizationActivity extends AbstractActivity {
@@ -82,6 +80,7 @@ public abstract class AbstractCredentialsAuthorizationActivity extends AbstractA
 
     @Override
     public void onNewIntent(final Intent intent) {
+        super.onNewIntent(intent);  // call super to make lint happy
         setIntent(intent);
     }
 
@@ -101,28 +100,20 @@ public abstract class AbstractCredentialsAuthorizationActivity extends AbstractA
                 res.getString(R.string.init_login_popup), getAuthDialogWait(), true);
         loginDialog.setCancelable(false);
 
-        AndroidRxUtils.bindActivity(authorizationActivity, Observable.defer(new Callable<Observable<StatusCode>>() {
-            @Override
-            public Observable<StatusCode> call() {
-                return Observable.just(checkCredentials(credentials));
-            }
-        })).subscribeOn(AndroidRxUtils.networkScheduler).subscribe(new Consumer<StatusCode>() {
-            @Override
-            public void accept(final StatusCode statusCode) {
-                loginDialog.dismiss();
-                if (statusCode == StatusCode.NO_ERROR) {
-                    setCredentials(credentials);
-                    showToast(getAuthDialogCompleted());
-                    setResult(RESULT_OK);
-                    finish();
-                } else {
-                    Dialogs.message(authorizationActivity, R.string.init_login_popup,
-                        res.getString(R.string.init_login_popup_failed_reason, statusCode.getErrorString(res))
-                    );
-                    checkButton.setText(getAuthCheckAgain());
-                    checkButton.setOnClickListener(new CheckListener());
-                    checkButton.setEnabled(true);
-                }
+        AndroidRxUtils.bindActivity(authorizationActivity, Observable.defer(() -> Observable.just(checkCredentials(credentials)))).subscribeOn(AndroidRxUtils.networkScheduler).subscribe(statusCode -> {
+            loginDialog.dismiss();
+            if (statusCode == StatusCode.NO_ERROR) {
+                setCredentials(credentials);
+                showToast(getAuthDialogCompleted());
+                setResult(RESULT_OK);
+                finish();
+            } else {
+                Dialogs.message(authorizationActivity, R.string.init_login_popup,
+                    res.getString(R.string.init_login_popup_failed_reason, statusCode.getErrorString(res))
+                );
+                checkButton.setText(getAuthCheckAgain());
+                checkButton.setOnClickListener(new CheckListener());
+                checkButton.setEnabled(true);
             }
         });
     }
@@ -162,9 +153,9 @@ public abstract class AbstractCredentialsAuthorizationActivity extends AbstractA
 
     protected abstract String getCreateAccountUrl();
 
-    protected abstract void setCredentials(final Credentials credentials);
+    protected abstract void setCredentials(Credentials credentials);
 
-    protected abstract StatusCode checkCredentials(final Credentials credentials);
+    protected abstract StatusCode checkCredentials(Credentials credentials);
 
     protected abstract String getAuthTitle();
 
@@ -202,8 +193,8 @@ public abstract class AbstractCredentialsAuthorizationActivity extends AbstractA
      *
      */
     protected void enableCheckButtonIfReady() {
-        checkButton.setEnabled(StringUtils.isNotEmpty(usernameEditText.getText().toString()) &&
-                StringUtils.isNotEmpty(passwordEditText.getText().toString()));
+        checkButton.setEnabled(StringUtils.isNotEmpty(usernameEditText.getText()) &&
+                StringUtils.isNotEmpty(passwordEditText.getText()));
     }
 
     /**

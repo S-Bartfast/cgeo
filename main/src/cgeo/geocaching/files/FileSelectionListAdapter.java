@@ -1,23 +1,23 @@
 package cgeo.geocaching.files;
 
 import cgeo.geocaching.R;
-import cgeo.geocaching.ui.recyclerview.AbstractRecyclerViewAdapter;
 import cgeo.geocaching.ui.recyclerview.AbstractRecyclerViewHolder;
 
 import android.graphics.Typeface;
-import android.support.annotation.NonNull;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
 import java.util.List;
 
 import butterknife.BindView;
 
-public class FileSelectionListAdapter extends AbstractRecyclerViewAdapter<FileSelectionListAdapter.ViewHolder> {
+public class FileSelectionListAdapter extends RecyclerView.Adapter<FileSelectionListAdapter.ViewHolder> {
 
     private final IFileSelectionView parentView;
     @NonNull private final List<File> files;
@@ -33,25 +33,21 @@ public class FileSelectionListAdapter extends AbstractRecyclerViewAdapter<FileSe
     }
 
     @Override
+    @NonNull
     public ViewHolder onCreateViewHolder(final ViewGroup parent, final int position) {
         final View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.mapfile_item, parent, false);
         final ViewHolder viewHolder = new ViewHolder(view);
-        viewHolder.itemView.setOnClickListener(new OnClickListener() {
-
-            @Override
-            public void onClick(final View view) {
-                final File file = files.get(viewHolder.getItemPosition());
-                parentView.setCurrentFile(file.toString());
-                parentView.close();
-            }
+        viewHolder.itemView.setOnClickListener(view1 -> {
+            final File file = files.get(viewHolder.getAdapterPosition());
+            parentView.setCurrentFile(file.toString());
+            parentView.close();
         });
 
         return viewHolder;
     }
 
     @Override
-    public void onBindViewHolder(final ViewHolder holder, final int position) {
-        super.onBindViewHolder(holder, position);
+    public void onBindViewHolder(@NonNull final ViewHolder holder, final int position) {
         final File file = files.get(position);
 
         final String currentFile = parentView.getCurrentFile();

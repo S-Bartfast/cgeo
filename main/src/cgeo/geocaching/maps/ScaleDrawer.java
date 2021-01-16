@@ -1,20 +1,18 @@
 package cgeo.geocaching.maps;
 
-import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Units;
 import cgeo.geocaching.maps.interfaces.GeoPointImpl;
 import cgeo.geocaching.maps.interfaces.MapViewImpl;
+import cgeo.geocaching.utils.DisplayUtils;
+import cgeo.geocaching.utils.Log;
 
-import org.apache.commons.lang3.tuple.ImmutablePair;
-
-import android.content.Context;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
-import android.util.DisplayMetrics;
-import android.view.WindowManager;
+
+import org.apache.commons.lang3.tuple.ImmutablePair;
 
 public class ScaleDrawer {
     private static final double SCALE_WIDTH_FACTOR = 1.0 / 2.5;
@@ -25,10 +23,7 @@ public class ScaleDrawer {
     private float pixelDensity = 0;
 
     public ScaleDrawer() {
-        final DisplayMetrics metrics = new DisplayMetrics();
-        final WindowManager windowManager = (WindowManager) CgeoApplication.getInstance().getSystemService(Context.WINDOW_SERVICE);
-        windowManager.getDefaultDisplay().getMetrics(metrics);
-        pixelDensity = metrics.density;
+        pixelDensity = DisplayUtils.getDisplayDensity();
     }
 
     private static double keepSignificantDigit(final double distance) {
@@ -36,9 +31,13 @@ public class ScaleDrawer {
         return scale * Math.floor(distance / scale);
     }
 
-    void drawScale(final Canvas canvas, final MapViewImpl mapView) {
+    public void drawScale(final Canvas canvas, final MapViewImpl mapView) {
         final double span = mapView.getLongitudeSpan() / 1e6;
         final GeoPointImpl center = mapView.getMapViewCenter();
+        if (center == null) {
+            Log.w("No center, cannot draw scale");
+            return;
+        }
 
         final int bottom = mapView.getHeight() - 14; // pixels from bottom side of screen
 
@@ -79,17 +78,19 @@ public class ScaleDrawer {
             scale.setColor(0xFF000000);
         }
 
-        final String formatString = distanceRound >= 1 ? "%.0f" : "%.1f";
+        final String info = String.format(distanceRound >= 1 ? "%.0f" : "%.1f", distanceRound) + " " + scaled.right;
+        final float x = (float) (pixels - 10 * pixelDensity);
+        final float y = bottom - 10 * pixelDensity;
 
         canvas.drawLine(10, bottom, 10, bottom - 8 * pixelDensity, scaleShadow);
         canvas.drawLine((int) (pixels + 10), bottom, (int) (pixels + 10), bottom - 8 * pixelDensity, scaleShadow);
         canvas.drawLine(8, bottom, (int) (pixels + 12), bottom, scaleShadow);
-        canvas.drawText(String.format(formatString, distanceRound) + " " + scaled.right, (float) (pixels - 10 * pixelDensity), bottom - 10 * pixelDensity, scaleShadow);
+        canvas.drawText(info, x, y, scaleShadow);
 
         canvas.drawLine(11, bottom, 11, bottom - (6 * pixelDensity), scale);
         canvas.drawLine((int) (pixels + 9), bottom, (int) (pixels + 9), bottom - 6 * pixelDensity, scale);
         canvas.drawLine(10, bottom, (int) (pixels + 10), bottom, scale);
-        canvas.drawText(String.format(formatString, distanceRound) + " " + scaled.right, (float) (pixels - 10 * pixelDensity), bottom - 10 * pixelDensity, scale);
+        canvas.drawText(info, x, y, scale);
     }
 
 }

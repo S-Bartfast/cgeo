@@ -2,15 +2,18 @@ package cgeo.geocaching.connector;
 
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.R;
+import cgeo.geocaching.connector.gc.GCMemberState;
 import cgeo.geocaching.enumerations.StatusCode;
 import cgeo.geocaching.network.Cookies;
 import cgeo.geocaching.network.Network;
 import cgeo.geocaching.settings.Credentials;
 import cgeo.geocaching.settings.DiskCookieStore;
+import cgeo.geocaching.settings.Settings;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
 public abstract class AbstractLogin {
 
@@ -59,6 +62,7 @@ public abstract class AbstractLogin {
     }
 
     protected void resetLoginStatus() {
+        Settings.setGCMemberStatus(GCMemberState.UNKNOWN);
         Cookies.clearCookies();
         DiskCookieStore.setCookieStore(null);
 
@@ -89,9 +93,15 @@ public abstract class AbstractLogin {
     }
 
     @NonNull
-    protected abstract StatusCode login(final boolean retry);
+    protected abstract StatusCode login(boolean retry);
 
     @NonNull
-    protected abstract StatusCode login(final boolean retry, @NonNull final Credentials credentials);
+    protected abstract StatusCode login(boolean retry, @NonNull Credentials credentials);
+
+    public void increaseActualCachesFound() {
+        if (actualCachesFound >= 0) {
+            actualCachesFound++;
+        }
+    }
 
 }

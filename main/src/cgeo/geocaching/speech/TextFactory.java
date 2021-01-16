@@ -7,8 +7,8 @@ import cgeo.geocaching.location.IConversion;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.utils.AngleUtils;
 
-import android.support.annotation.PluralsRes;
-import android.support.annotation.StringRes;
+import androidx.annotation.PluralsRes;
+import androidx.annotation.StringRes;
 
 import java.util.Locale;
 
@@ -35,9 +35,16 @@ public class TextFactory {
         return getDirection(position, target, direction) + ". " + getDistance(position, target);
     }
 
+    public static String getText(final float kilometers) {
+        return getDistance(kilometers);
+    }
+
     private static String getDistance(final Geopoint position, final Geopoint target) {
         final float kilometers = position.distanceTo(target);
+        return getDistance(kilometers);
+    }
 
+    private static String getDistance(final float kilometers) {
         if (Settings.useImperialUnits()) {
             return getDistance(kilometers / IConversion.MILES_TO_KILOMETER,
                     (int) (kilometers * 1000.0 * IConversion.METERS_TO_FEET),

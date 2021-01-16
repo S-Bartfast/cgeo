@@ -2,10 +2,26 @@ package cgeo.geocaching.utils;
 
 import cgeo.geocaching.models.Geocache;
 
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.ContentUris;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.CalendarContract;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
+
+import javax.annotation.Nullable;
 
 public final class CalendarUtils {
+
+    public static final String PATTERN_YYYYMM = "yyyy-MM";
+    public static final String PATTERN_YYYYMMDD = "yyyy-MM-dd";
 
     private CalendarUtils() {
         // utility class
@@ -47,4 +63,70 @@ public final class CalendarUtils {
         return daysSince(date) < -1;
     }
 
+    /**
+     * Open the calendar app on a specific date.
+     */
+    public static void openCalendar(final Activity activity, final Date date) {
+        final Uri.Builder builder = CalendarContract.CONTENT_URI.buildUpon();
+        builder.appendPath("time");
+        ContentUris.appendId(builder, date.getTime());
+        final Intent intent = new Intent(Intent.ACTION_VIEW).setData(builder.build());
+        activity.startActivity(intent);
+    }
+
+    /**
+     * returns current date/time formatted according to the supplied {SimpleDateFormat} string
+     * @param format string
+     * @return formatted date
+     */
+    public static String formatDateTime(final String format) {
+        final Date date = Calendar.getInstance().getTime();
+        final DateFormat dateFormat = new SimpleDateFormat(format, Locale.getDefault());
+        return dateFormat.format(date);
+    }
+
+    /**
+     * returns given date in format yyyy-mm, or empty string if null given
+     * @param date Date to be formatted
+     * @return String formatted date
+     */
+    public static String yearMonth(@Nullable final Date date) {
+        final DateFormat dateFormat = new SimpleDateFormat(PATTERN_YYYYMM, Locale.getDefault());
+        return null == date ? "" : dateFormat.format(date);
+    }
+
+    /**
+     * returns given date in format yyyy-mm, or empty string if 0 given
+     * @param date Date to be formatted
+     * @return String formatted date
+     */
+    public static String yearMonth(final long date) {
+        final DateFormat dateFormat = new SimpleDateFormat(PATTERN_YYYYMM, Locale.getDefault());
+        return 0 == date ? "" : dateFormat.format(date);
+    }
+
+    /**
+     * returns given date in format yyyy-mm-dd, or empty string if 0 given
+     * @param date Date to be formatted
+     * @return String formatted date
+     */
+    public static String yearMonthDay(final long date) {
+        final SimpleDateFormat pattern = new SimpleDateFormat(PATTERN_YYYYMMDD, Locale.getDefault());
+        return date == 0 ? "" : pattern.format(date);
+    }
+
+    /**
+     * parses given date to a long
+     * @param date in Format yyyy-mm-dd
+     * @return time value or 0 on error
+     */
+    public static long parseYearMonthDay(final String date) {
+        @SuppressLint("SimpleDateFormat") final SimpleDateFormat pattern = new SimpleDateFormat(CalendarUtils.PATTERN_YYYYMMDD);
+        try {
+            final Date result = pattern.parse(date);
+            return result.getTime();
+        } catch (ParseException e) {
+            return 0;
+        }
+    }
 }

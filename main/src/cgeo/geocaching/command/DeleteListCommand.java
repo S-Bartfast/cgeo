@@ -8,10 +8,10 @@ import cgeo.geocaching.list.StoredList;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.storage.DataStore;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
 import android.app.Activity;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Set;
 
@@ -20,6 +20,7 @@ public abstract class DeleteListCommand extends AbstractCommand {
     private final int listId;
     private Set<String> geocodes;
     private String listName;
+    private int markerId;
 
     protected DeleteListCommand(@NonNull final Activity context, final int listId) {
         super(context);
@@ -33,6 +34,7 @@ public abstract class DeleteListCommand extends AbstractCommand {
         // remember list details, as we have to create a new list eventually
         final StoredList list = DataStore.getList(listId);
         listName = list.getTitle();
+        markerId = list.markerId;
         DataStore.removeList(listId);
     }
 
@@ -43,7 +45,7 @@ public abstract class DeleteListCommand extends AbstractCommand {
         final int newListId = DataStore.createList(listName);
 
         // update the list cache
-        new StoredList(newListId, listName, 0);
+        new StoredList(newListId, listName, markerId, 0);
 
         final Set<Geocache> caches = DataStore.loadCaches(geocodes, LoadFlags.LOAD_CACHE_OR_DB);
         DataStore.addToList(caches, newListId);

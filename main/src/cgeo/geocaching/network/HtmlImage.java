@@ -19,10 +19,11 @@ import android.graphics.BitmapFactory;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.Html;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -31,18 +32,16 @@ import java.io.FileNotFoundException;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
-import io.reactivex.Completable;
-import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Cancellable;
-import io.reactivex.functions.Function;
-import io.reactivex.internal.disposables.CancellableDisposable;
-import io.reactivex.processors.PublishProcessor;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Maybe;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.ObservableEmitter;
+import io.reactivex.rxjava3.core.ObservableOnSubscribe;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.internal.disposables.CancellableDisposable;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import okhttp3.Response;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -85,12 +84,7 @@ public class HtmlImage implements Html.ImageGetter {
     final WeakReference<TextView> viewRef;
     private final Map<String, BitmapDrawable> cache = new HashMap<>();
 
-    private final ObservableCache<String, BitmapDrawable> observableCache = new ObservableCache<>(new Function<String, Observable<BitmapDrawable>>() {
-        @Override
-        public Observable<BitmapDrawable> apply(final String url) {
-            return fetchDrawableUncached(url);
-        }
-    });
+    private final ObservableCache<String, BitmapDrawable> observableCache = new ObservableCache<>(this::fetchDrawableUncached);
 
     // Background loading
     // .cache() is not yet available on Completable instances as of RxJava 2.0.0, so we have to go back
@@ -177,8 +171,18 @@ public class HtmlImage implements Html.ImageGetter {
             cache.put(url, null);
             return null;
         }
+
+        BitmapDrawable result = null;
         final TextView textView = viewRef.get();
-        final BitmapDrawable result = textView == null ? drawable.blockingLast(null) : getContainerDrawable(textView, drawable);
+        if (textView != null) {
+            result = getContainerDrawable(textView, drawable);
+        } else {
+            final Maybe<BitmapDrawable> lastElement = drawable.lastElement();
+            if (!lastElement.isEmpty().blockingGet()) {
+                result = lastElement.blockingGet();
+            }
+        }
+
         cache.put(url, result);
         return result;
     }
@@ -201,12 +205,9 @@ public class HtmlImage implements Html.ImageGetter {
         // Explicit local file URLs are loaded from the filesystem regardless of their age. The IO part is short
         // enough to make the whole operation on the computation scheduler.
         if (FileUtils.isFileUrl(url)) {
-            return Observable.defer(new Callable<Observable<BitmapDrawable>>() {
-                @Override
-                public Observable<BitmapDrawable> call() {
-                    final Bitmap bitmap = loadCachedImage(FileUtils.urlToFile(url), true).left;
-                    return bitmap != null ? Observable.just(ImageUtils.scaleBitmapToFitDisplay(bitmap)) : Observable.<BitmapDrawable>empty();
-                }
+            return Observable.defer(() -> {
+                final Bitmap bitmap = loadCachedImage(FileUtils.urlToFile(url), true).left;
+                return bitmap != null ? Observable.just(ImageUtils.scaleBitmapToFitDisplay(bitmap)) : Observable.empty();
             }).subscribeOn(AndroidRxUtils.computationScheduler);
         }
 
@@ -217,35 +218,23 @@ public class HtmlImage implements Html.ImageGetter {
             @Override
             public void subscribe(final ObservableEmitter<BitmapDrawable> emitter) throws Exception {
                 // Canceling disposable must sever this connection
-                final CancellableDisposable aborter = new CancellableDisposable(new Cancellable() {
-                    @Override
-                    public void cancel() throws Exception {
-                        emitter.onComplete();
-                    }
-                });
+                final CancellableDisposable aborter = new CancellableDisposable(emitter::onComplete);
                 disposable.add(aborter);
                 // Canceling this subscription must dispose the data retrieval
-                emitter.setDisposable(AndroidRxUtils.computationScheduler.scheduleDirect(new Runnable() {
-                    @Override
-                    public void run() {
-                        final ImmutablePair<BitmapDrawable, Boolean> loaded = loadFromDisk();
-                        final BitmapDrawable bitmap = loaded.left;
-                        if (loaded.right) {
-                            if (!onlySave) {
-                                emitter.onNext(bitmap);
-                            }
-                            emitter.onComplete();
-                            return;
-                        }
-                        if (bitmap != null && !onlySave) {
+                emitter.setDisposable(AndroidRxUtils.computationScheduler.scheduleDirect(() -> {
+                    final ImmutablePair<BitmapDrawable, Boolean> loaded = loadFromDisk();
+                    final BitmapDrawable bitmap = loaded.left;
+                    if (loaded.right) {
+                        if (!onlySave) {
                             emitter.onNext(bitmap);
                         }
-                        AndroidRxUtils.networkScheduler.scheduleDirect(new Runnable() {
-                            @Override public void run() {
-                                downloadAndSave(emitter, aborter);
-                            }
-                        });
+                        emitter.onComplete();
+                        return;
                     }
+                    if (bitmap != null && !onlySave) {
+                        emitter.onNext(bitmap);
+                    }
+                    AndroidRxUtils.networkScheduler.scheduleDirect(() -> downloadAndSave(emitter, aborter));
                 }));
             }
 
@@ -273,20 +262,17 @@ public class HtmlImage implements Html.ImageGetter {
                     emitter.onComplete();
                     return;
                 }
-                AndroidRxUtils.computationScheduler.scheduleDirect(new Runnable() {
-                    @Override
-                    public void run() {
-                        final ImmutablePair<BitmapDrawable, Boolean> loaded = loadFromDisk();
-                        final BitmapDrawable image = loaded.left;
-                        if (image != null) {
-                            emitter.onNext(image);
-                        } else {
-                            emitter.onNext(returnErrorImage ?
-                                    new BitmapDrawable(resources, BitmapFactory.decodeResource(resources, R.drawable.image_not_loaded)) :
-                                    ImageUtils.getTransparent1x1Drawable(resources));
-                        }
-                        emitter.onComplete();
+                AndroidRxUtils.computationScheduler.scheduleDirect(() -> {
+                    final ImmutablePair<BitmapDrawable, Boolean> loaded = loadFromDisk();
+                    final BitmapDrawable image = loaded.left;
+                    if (image != null) {
+                        emitter.onNext(image);
+                    } else {
+                        emitter.onNext(returnErrorImage ?
+                                new BitmapDrawable(resources, BitmapFactory.decodeResource(resources, R.drawable.image_not_loaded)) :
+                                ImageUtils.getTransparent1x1Drawable(resources));
                     }
+                    emitter.onComplete();
                 });
             }
         });
@@ -381,12 +367,18 @@ public class HtmlImage implements Html.ImageGetter {
             return url;
         }
 
+        final String hostUrl = ConnectorFactory.getConnector(geocode).getHostUrl();
+
+        // special case for scheme relative URLs
+        if (StringUtils.startsWith(url, "//")) {
+            return StringUtils.isEmpty(hostUrl) ? "https:" + url : Uri.parse(hostUrl).getScheme() + ":" + url;
+        }
+
         if (!StringUtils.startsWith(url, "/")) {
             Log.w("unusable relative URL for geocache " + geocode + ": " + url);
             return null;
         }
 
-        final String hostUrl = ConnectorFactory.getConnector(geocode).getHostUrl();
         if (StringUtils.isEmpty(hostUrl)) {
             Log.w("unable to compute relative images URL for " + geocode);
             return null;

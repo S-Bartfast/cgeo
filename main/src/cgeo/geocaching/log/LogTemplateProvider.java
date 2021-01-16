@@ -4,19 +4,22 @@ import cgeo.geocaching.R;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.IConnector;
 import cgeo.geocaching.connector.capability.ILogin;
+import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Trackable;
 import cgeo.geocaching.settings.Settings;
+import cgeo.geocaching.storage.DataStore;
+import cgeo.geocaching.storage.extension.FoundNumCounter;
 import cgeo.geocaching.utils.Formatter;
 
-import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
-import android.support.annotation.StringRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * Provides all the available templates for logging.
@@ -157,7 +160,42 @@ public final class LogTemplateProvider {
 
             @Override
             public String getValue(final LogContext context) {
-                return getCounter(context, true);
+
+                final boolean increment;
+                increment = null == context.logEntry || context.logEntry.logType == LogType.FOUND_IT || context.logEntry.logType == LogType.ATTENDED || context.logEntry.logType == LogType.WEBCAM_PHOTO_TAKEN;
+
+                final Geocache cache = context.getCache();
+                if (cache == null) {
+                    return StringUtils.EMPTY;
+                }
+                long counter;
+                final String onlineNum = getCounter(context, increment);
+                final IConnector connector = ConnectorFactory.getConnector(cache);
+
+                if (onlineNum.equals(StringUtils.EMPTY)) {
+                    final FoundNumCounter f = FoundNumCounter.load(connector.getName());
+                    if (f == null) {
+                        return StringUtils.EMPTY;
+                    }
+                    counter = f.getCounter(increment);
+                } else {
+                    counter = Long.parseLong(onlineNum);
+                }
+                counter += DataStore.getFoundsOffline(connector.getName());
+                return String.valueOf(counter);
+            }
+        });
+        templates.add(new LogTemplate("ONLINENUM", R.string.init_signature_template_number_legacy) {
+            // this option can be removed when [number] template checks, if some logs are newer as the cache-log and if it's the case ignores them
+
+            @Override
+            public String getValue(final LogContext context) {
+
+                if (null == context.logEntry || context.logEntry.logType == LogType.FOUND_IT || context.logEntry.logType == LogType.ATTENDED || context.logEntry.logType == LogType.WEBCAM_PHOTO_TAKEN) {
+                    return getCounter(context, true);
+                } else {
+                    return getCounter(context, false);
+                }
             }
         });
         templates.add(new LogTemplate("OWNER", R.string.init_signature_template_owner) {
@@ -189,6 +227,36 @@ public final class LogTemplateProvider {
                 return StringUtils.EMPTY;
             }
         });
+        templates.add(new LogTemplate("DIFFICULTY", R.string.init_signature_template_difficulty) {
+            @Override
+            public String getValue(final LogContext context) {
+                final Geocache cache = context.getCache();
+                if (cache != null) {
+                    return String.valueOf(cache.getDifficulty());
+                }
+                return StringUtils.EMPTY;
+            }
+        });
+        templates.add(new LogTemplate("TERRAIN", R.string.init_signature_template_terrain) {
+            @Override
+            public String getValue(final LogContext context) {
+                final Geocache cache = context.getCache();
+                if (cache != null) {
+                    return String.valueOf(cache.getTerrain());
+                }
+                return StringUtils.EMPTY;
+            }
+        });
+        templates.add(new LogTemplate("SIZE", R.string.init_signature_template_size) {
+            @Override
+            public String getValue(final LogContext context) {
+                final Geocache cache = context.getCache();
+                if (cache != null) {
+                    return cache.getSize().getL10n();
+                }
+                return StringUtils.EMPTY;
+            }
+        });
         templates.add(new LogTemplate("URL", R.string.init_signature_template_url) {
 
             @Override
@@ -210,6 +278,17 @@ public final class LogTemplateProvider {
                 final LogEntry logEntry = context.getLogEntry();
                 if (logEntry != null) {
                     return logEntry.getDisplayText();
+                }
+                return StringUtils.EMPTY;
+            }
+        });
+        templates.add(new LogTemplate("TYPE",  R.string.init_signature_template_type) {
+            @Override
+            public String getValue(final LogContext context) {
+                final Geocache cache = context.getCache();
+                if (cache != null) {
+                    final CacheType cacheType = cache.getType();
+                    return cacheType.getL10n();
                 }
                 return StringUtils.EMPTY;
             }

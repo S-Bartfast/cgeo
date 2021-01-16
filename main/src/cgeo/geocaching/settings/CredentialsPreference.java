@@ -12,8 +12,6 @@ import cgeo.geocaching.network.HtmlImage;
 
 import android.content.Context;
 import android.content.Intent;
-import android.preference.Preference;
-import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,7 +19,8 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
-import butterknife.ButterKnife;
+import androidx.annotation.NonNull;
+
 import org.apache.commons.lang3.StringUtils;
 
 public class CredentialsPreference extends AbstractClickablePreference {
@@ -84,18 +83,15 @@ public class CredentialsPreference extends AbstractClickablePreference {
     @Override
     protected OnPreferenceClickListener getOnPreferenceClickListener(final SettingsActivity settingsActivity) {
         settingsActivity.setAuthTitle(credentialsMapping.prefKeyId);
-        return new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(final Preference preference) {
-                final Intent checkIntent = new Intent(preference.getContext(), credentialsMapping.getAuthActivity());
+        return preference -> {
+            final Intent checkIntent = new Intent(preference.getContext(), credentialsMapping.getAuthActivity());
 
-                final Credentials credentials = credentialsMapping.getConnector().getCredentials();
-                checkIntent.putExtra(Intents.EXTRA_CREDENTIALS_AUTH_USERNAME, credentials.getUsernameRaw());
-                checkIntent.putExtra(Intents.EXTRA_CREDENTIALS_AUTH_PASSWORD, credentials.getPasswordRaw());
+            final Credentials credentials = credentialsMapping.getConnector().getCredentials();
+            checkIntent.putExtra(Intents.EXTRA_CREDENTIALS_AUTH_USERNAME, credentials.getUsernameRaw());
+            checkIntent.putExtra(Intents.EXTRA_CREDENTIALS_AUTH_PASSWORD, credentials.getPasswordRaw());
 
-                settingsActivity.startActivityForResult(checkIntent, credentialsMapping.prefKeyId);
-                return false; // no shared preference has to be changed
-            }
+            settingsActivity.startActivityForResult(checkIntent, credentialsMapping.prefKeyId);
+            return false; // no shared preference has to be changed
         };
     }
 
@@ -120,7 +116,7 @@ public class CredentialsPreference extends AbstractClickablePreference {
         final HtmlImage imgGetter = new HtmlImage(HtmlImage.SHARED, false, false, false);
         iconView.setImageDrawable(imgGetter.getDrawable(avatarUrl));
 
-        final LinearLayout frame = ButterKnife.findById(preferenceView, android.R.id.widget_frame);
+        final LinearLayout frame = preferenceView.findViewById(android.R.id.widget_frame);
         frame.setVisibility(View.VISIBLE);
         frame.addView(iconView);
 

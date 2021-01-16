@@ -6,6 +6,7 @@ import cgeo.geocaching.activity.ActivityMixin;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.storage.LocalStorage;
+import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.AsyncTaskWithProgress;
 import cgeo.geocaching.utils.EnvironmentUtils;
 import cgeo.geocaching.utils.FileUtils;
@@ -15,18 +16,19 @@ import cgeo.geocaching.utils.ShareUtils;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.DialogInterface;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,9 +36,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import butterknife.ButterKnife;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.CharEncoding;
 
 public class GpxExport extends AbstractExport {
 
@@ -74,30 +74,22 @@ public class GpxExport extends AbstractExport {
     }
 
     private Dialog getExportDialog(final String[] geocodes, final Activity activity) {
-        final AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        final AlertDialog.Builder builder = Dialogs.newBuilder(activity);
         builder.setTitle(activity.getString(R.string.export_confirm_title, activity.getString(R.string.export_gpx)));
 
         final View layout = View.inflate(activity, R.layout.gpx_export_dialog, null);
         builder.setView(layout);
 
-        final TextView text = ButterKnife.findById(layout, R.id.info);
+        final TextView text = layout.findViewById(R.id.info);
         text.setText(activity.getString(R.string.export_confirm_message, Settings.getGpxExportDir(), fileName));
 
-        final CheckBox shareOption = ButterKnife.findById(layout, R.id.share);
-        shareOption.setChecked(Settings.getShareAfterExport());
-
-        final CheckBox includeFoundStatus = ButterKnife.findById(layout, R.id.include_found_status);
+        final CheckBox includeFoundStatus = layout.findViewById(R.id.include_found_status);
         includeFoundStatus.setChecked(Settings.getIncludeFoundStatus());
 
-        builder.setPositiveButton(R.string.export, new DialogInterface.OnClickListener() {
-
-            @Override
-            public void onClick(final DialogInterface dialog, final int which) {
-                Settings.setShareAfterExport(shareOption.isChecked());
-                Settings.setIncludeFoundStatus(includeFoundStatus.isChecked());
-                dialog.dismiss();
-                new ExportTask(activity).execute(geocodes);
-            }
+        builder.setPositiveButton(R.string.export, (dialog, which) -> {
+            Settings.setIncludeFoundStatus(includeFoundStatus.isChecked());
+            dialog.dismiss();
+            new ExportTask(activity).execute(geocodes);
         });
 
         return builder.create();
@@ -140,23 +132,18 @@ public class GpxExport extends AbstractExport {
                 final File exportLocation = LocalStorage.getGpxExportDirectory();
                 FileUtils.mkdirs(exportLocation);
 
-                writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(exportFile), CharEncoding.UTF_8));
-                new GpxSerializer().writeGPX(allGeocodes, writer, new GpxSerializer.ProgressListener() {
-
-                    @Override
-                    public void publishProgress(final int countExported) {
-                        ExportTask.this.publishProgress(countExported);
-                    }
-                });
+                writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(exportFile), StandardCharsets.UTF_8));
+                new GpxSerializer().writeGPX(allGeocodes, writer, ExportTask.this::publishProgress);
             } catch (final IOException e) {
                 Log.e("GpxExport.ExportTask export", e);
-                IOUtils.closeQuietly(writer);
                 // delete partial GPX file on error
                 if (exportFile.exists()) {
                     FileUtils.deleteIgnoringFailure(exportFile);
                 }
 
                 return null;
+            } finally {
+                IOUtils.closeQuietly(writer);
             }
 
             return exportFile;
@@ -167,10 +154,7 @@ public class GpxExport extends AbstractExport {
             final Activity activityLocal = activity;
             if (activityLocal != null) {
                 if (exportFile != null) {
-                    ActivityMixin.showToast(activityLocal, getName() + ' ' + activityLocal.getString(R.string.export_exportedto) + ": " + exportFile.toString());
-                    if (Settings.getShareAfterExport()) {
-                        ShareUtils.share(activityLocal, exportFile, "application/xml", R.string.export_gpx_to);
-                    }
+                        ShareUtils.shareFileOrDismissDialog(activityLocal, exportFile, "application/xml", R.string.export, getName() + ' ' + activityLocal.getString(R.string.export_exportedto) + ": " + exportFile.toString());
                 } else {
                     ActivityMixin.showToast(activityLocal, activityLocal.getString(R.string.export_failed));
                 }

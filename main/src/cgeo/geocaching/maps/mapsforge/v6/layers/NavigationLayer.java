@@ -1,19 +1,15 @@
 package cgeo.geocaching.maps.mapsforge.v6.layers;
 
-import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.maps.routing.Routing;
+import cgeo.geocaching.settings.Settings;
+import cgeo.geocaching.utils.MapLineUtils;
 
-import android.content.Context;
 import android.location.Location;
-import android.support.v4.util.Pair;
-import android.util.DisplayMetrics;
-import android.view.WindowManager;
-
-import java.util.ArrayList;
 
 import org.mapsforge.core.graphics.Canvas;
 import org.mapsforge.core.graphics.Paint;
+import org.mapsforge.core.graphics.Path;
 import org.mapsforge.core.graphics.Style;
 import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.Point;
@@ -25,19 +21,26 @@ public class NavigationLayer extends Layer {
 
     private Geopoint currentCoords;
     private Geopoint destinationCoords;
-    private final float width;
 
-    private Paint line = null;
+    private Paint paint = null;
+    private PostRealDistance postRealDistance = null;
 
-    public NavigationLayer(final Geopoint coords) {
+    public interface PostRealDistance {
+        void postRealDistance (float realDistance);
+    }
 
+    public NavigationLayer(final Geopoint coords, final PostRealDistance postRealDistance) {
         this.destinationCoords = coords;
+        this.postRealDistance = postRealDistance;
+        resetColor();
+    }
 
-        final DisplayMetrics metrics = new DisplayMetrics();
-        final WindowManager windowManager = (WindowManager) CgeoApplication.getInstance().getSystemService(Context.WINDOW_SERVICE);
-        windowManager.getDefaultDisplay().getMetrics(metrics);
-
-        width = 8f * metrics.density;
+    public void resetColor() {
+        paint = AndroidGraphicFactory.INSTANCE.createPaint();
+        paint.setStrokeWidth(MapLineUtils.getDirectionLineWidth());
+        paint.setStyle(Style.STROKE);
+        paint.setColor(MapLineUtils.getDirectionColor());
+        paint.setTextSize(20);
     }
 
     public void setDestination(final Geopoint coords) {
@@ -50,36 +53,31 @@ public class NavigationLayer extends Layer {
 
     @Override
     public void draw(final BoundingBox boundingBox, final byte zoomLevel, final Canvas canvas, final Point topLeftPoint) {
-        if (destinationCoords == null || currentCoords == null) {
+        if (destinationCoords == null || currentCoords == null || !Settings.isMapDirection()) {
             return;
         }
 
-        if (line == null) {
-            line = AndroidGraphicFactory.INSTANCE.createPaint();
-            line.setStrokeWidth(width);
-            line.setStyle(Style.STROKE);
-            line.setColor(0xD0EB391E);
-        }
         final long mapSize = MercatorProjection.getMapSize(zoomLevel, this.displayModel.getTileSize());
 
         final Geopoint[] routingPoints = Routing.getTrack(currentCoords, destinationCoords);
-        final ArrayList<Pair<Integer, Integer>> pixelPoints = new ArrayList<>(routingPoints.length);
+        Geopoint point = routingPoints[0];
+        final Path path = AndroidGraphicFactory.INSTANCE.createPath();
+        path.moveTo((float) (MercatorProjection.longitudeToPixelX(point.getLongitude(), mapSize) - topLeftPoint.x), (float) (MercatorProjection.latitudeToPixelY(point.getLatitude(), mapSize) - topLeftPoint.y));
 
-        for (final Geopoint geopoint : routingPoints) {
-            pixelPoints.add(translateToPixels(mapSize, topLeftPoint, geopoint));
+        for (int i = 1; i < routingPoints.length; i++) {
+            point = routingPoints[i];
+            path.lineTo((float) (MercatorProjection.longitudeToPixelX(point.getLongitude(), mapSize) - topLeftPoint.x), (float) (MercatorProjection.latitudeToPixelY(point.getLatitude(), mapSize) - topLeftPoint.y));
         }
+        canvas.drawPath(path, paint);
 
-        // paint path segments
-        for (int i = 1; i < pixelPoints.size(); i++) {
-            final Pair<Integer, Integer> source = pixelPoints.get(i - 1);
-            final Pair<Integer, Integer> destination = pixelPoints.get(i);
-            canvas.drawLine(source.first, source.second, destination.first, destination.second, line);
+        // calculate distance
+        if (null != postRealDistance && routingPoints.length > 1) {
+            float distance = 0.0f;
+            for (int i = 1; i < routingPoints.length; i++) {
+                distance += routingPoints[i - 1].distanceTo(routingPoints[i]);
+            }
+            postRealDistance.postRealDistance(distance);
         }
     }
 
-    private static Pair<Integer, Integer> translateToPixels(final long mapSize, final Point topLeftPoint, final Geopoint coords) {
-        final int posX = (int) (MercatorProjection.longitudeToPixelX(coords.getLongitude(), mapSize) - topLeftPoint.x);
-        final int posY = (int) (MercatorProjection.latitudeToPixelY(coords.getLatitude(), mapSize) - topLeftPoint.y);
-        return new Pair<>(posX, posY);
-    }
 }

@@ -5,26 +5,27 @@ import cgeo.geocaching.CacheListActivity;
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.R;
 import cgeo.geocaching.activity.ActivityMixin;
-import cgeo.geocaching.connector.UserAction.Context;
+import cgeo.geocaching.connector.capability.IFavoriteCapability;
 import cgeo.geocaching.connector.capability.ISearchByCenter;
 import cgeo.geocaching.connector.capability.ISearchByFinder;
 import cgeo.geocaching.connector.capability.ISearchByGeocode;
 import cgeo.geocaching.connector.capability.ISearchByKeyword;
 import cgeo.geocaching.connector.capability.ISearchByOwner;
 import cgeo.geocaching.connector.capability.ISearchByViewPort;
+import cgeo.geocaching.connector.capability.IVotingCapability;
 import cgeo.geocaching.connector.capability.PersonalNoteCapability;
 import cgeo.geocaching.connector.capability.WatchListCapability;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.log.LogCacheActivity;
+import cgeo.geocaching.log.LogEntry;
 import cgeo.geocaching.log.LogType;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.utils.ClipboardUtils;
-import cgeo.geocaching.utils.functions.Action1;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -70,10 +71,6 @@ public abstract class AbstractConnector implements IConnector {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public boolean supportsFavoritePoints(@NonNull final Geocache cache) {
-        return false;
-    }
 
     @Override
     public boolean supportsLogging() {
@@ -86,11 +83,6 @@ public abstract class AbstractConnector implements IConnector {
     }
 
     @Override
-    public boolean supportsAddToFavorite(final Geocache cache, final LogType type) {
-        return false;
-    }
-
-    @Override
     public boolean canLog(@NonNull final Geocache cache) {
         return false;
     }
@@ -99,6 +91,16 @@ public abstract class AbstractConnector implements IConnector {
     @NonNull
     public ILoggingManager getLoggingManager(@NonNull final LogCacheActivity activity, @NonNull final Geocache cache) {
         return new NoLoggingManager();
+    }
+
+    @Override
+    public boolean supportsNamechange() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsDescriptionchange() {
+        return false;
     }
 
     @Override
@@ -144,7 +146,7 @@ public abstract class AbstractConnector implements IConnector {
     protected abstract String getCacheUrlPrefix();
 
     @Override
-    public boolean getHttps() {
+    public boolean isHttps() {
         return true;
     }
 
@@ -154,7 +156,7 @@ public abstract class AbstractConnector implements IConnector {
         if (StringUtils.isBlank(getHost())) {
             return "";
         }
-        return (getHttps() ? "https://" : "http://") + getHost();
+        return (isHttps() ? "https://" : "http://") + getHost();
     }
 
     @Override
@@ -167,6 +169,18 @@ public abstract class AbstractConnector implements IConnector {
     @Nullable
     public String getLongCacheUrl(@NonNull final Geocache cache) {
         return getCacheUrl(cache);
+    }
+
+    @Override
+    @Nullable
+    public String getCacheLogUrl(@NonNull final Geocache cache, @NonNull final LogEntry logEntry) {
+        return null; //by default, Connector does not support log urls
+    }
+
+    @Override
+    @Nullable
+    public String getServiceSpecificLogId(@Nullable final String serviceLogId) {
+        return serviceLogId; //by default, log id is directly usable
     }
 
     @Override
@@ -258,6 +272,8 @@ public abstract class AbstractConnector implements IConnector {
             list.add(feature(R.string.feature_own_coordinates));
         }
         addCapability(list, WatchListCapability.class, R.string.feature_watch_list);
+        addCapability(list, IFavoriteCapability.class, R.string.feature_favorite);
+        addCapability(list, IVotingCapability.class, R.string.feature_voting);
         return list;
     }
 
@@ -273,35 +289,19 @@ public abstract class AbstractConnector implements IConnector {
 
     @Override
     @NonNull
-    public List<UserAction> getUserActions() {
+    public List<UserAction> getUserActions(final UserAction.UAContext user) {
         final List<UserAction> actions = getDefaultUserActions();
 
         if (this instanceof ISearchByOwner) {
-            actions.add(new UserAction(R.string.user_menu_view_hidden, new Action1<Context>() {
-
-                @Override
-                public void call(final Context context) {
-                    CacheListActivity.startActivityOwner(context.activity, context.userName);
-                }
-            }));
+            actions.add(new UserAction(R.string.user_menu_view_hidden, context -> CacheListActivity.startActivityOwner(context.getContext(), context.userName)));
         }
 
         if (this instanceof ISearchByFinder) {
-            actions.add(new UserAction(R.string.user_menu_view_found, new Action1<UserAction.Context>() {
-
-                @Override
-                public void call(final Context context) {
-                    CacheListActivity.startActivityFinder(context.activity, context.userName);
-                }
-            }));
+            actions.add(new UserAction(R.string.user_menu_view_found, context -> CacheListActivity.startActivityFinder(context.getContext(), context.userName)));
         }
-        actions.add(new UserAction(R.string.copy_to_clipboard, new Action1<UserAction.Context>() {
-
-            @Override
-            public void call(final UserAction.Context context) {
-                ClipboardUtils.copyToClipboard(context.userName);
-                ActivityMixin.showToast(context.activity, R.string.clipboard_copy_ok);
-            }
+        actions.add(new UserAction(R.string.copy_to_clipboard, R.drawable.ic_menu_copy, context -> {
+            ClipboardUtils.copyToClipboard(context.userName);
+            ActivityMixin.showToast(context.getContext(), R.string.clipboard_copy_ok);
         }));
         return actions;
     }
@@ -313,19 +313,17 @@ public abstract class AbstractConnector implements IConnector {
     public static List<UserAction> getDefaultUserActions() {
         final List<UserAction> actions = new ArrayList<>();
         if (ContactsAddon.isAvailable()) {
-            actions.add(new UserAction(R.string.user_menu_open_contact, new Action1<UserAction.Context>() {
-
-                @Override
-                public void call(final Context context) {
-                    ContactsAddon.openContactCard(context.activity, context.userName);
-                }
-            }));
+            actions.add(new UserAction(R.string.user_menu_open_contact, context -> ContactsAddon.openContactCard(context.getContext(), context.userName)));
         }
 
         return actions;
     }
 
     public void logout() {
+    }
+
+    public String getShortHost() {
+        return StringUtils.remove(getHost(), "www.");
     }
 
     @Override

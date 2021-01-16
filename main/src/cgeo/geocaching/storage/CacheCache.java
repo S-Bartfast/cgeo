@@ -1,18 +1,20 @@
 package cgeo.geocaching.storage;
 
-import cgeo.geocaching.storage.DataStore.StorageLocation;
 import cgeo.geocaching.connector.gc.Tile;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.location.Viewport;
 import cgeo.geocaching.models.Geocache;
+import cgeo.geocaching.storage.DataStore.StorageLocation;
 import cgeo.geocaching.utils.LeastRecentlyUsedMap;
 import cgeo.geocaching.utils.LeastRecentlyUsedMap.RemoveHandler;
 import cgeo.geocaching.utils.Log;
 
-import org.apache.commons.lang3.StringUtils;
+import androidx.annotation.NonNull;
 
 import java.util.HashSet;
 import java.util.Set;
+
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * Cache for Caches. Every cache is stored in memory while c:geo is active to
@@ -96,6 +98,7 @@ public class CacheCache {
     }
 
     @Override
+    @NonNull
     public synchronized String toString() {
         return StringUtils.join(cachesCache.keySet(), ' ');
     }

@@ -9,26 +9,27 @@ import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.AndroidRxUtils;
 import cgeo.geocaching.utils.EnvironmentUtils;
 import cgeo.geocaching.utils.FileUtils;
+import cgeo.geocaching.utils.Formatter;
 import cgeo.geocaching.utils.Log;
 
 import android.app.ProgressDialog;
 import android.os.Environment;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.os.EnvironmentCompat;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.os.EnvironmentCompat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
-import io.reactivex.Observable;
-import io.reactivex.functions.Consumer;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.CharEncoding;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -42,6 +43,8 @@ public final class LocalStorage {
     private static final String CGEO_DIRNAME = "cgeo";
     private static final String DATABASES_DIRNAME = "databases";
     private static final String BACKUP_DIR_NAME = "backup";
+    public static final String LOGFILES_DIR_NAME = "logfiles";
+    private static final String MAP_DIR_NAME = "maps";
     private static final String GPX_DIR_NAME = "gpx";
     private static final String FIELD_NOTES_DIR_NAME = "field-notes";
     private static final String LEGACY_CGEO_DIR_NAME = ".cgeo";
@@ -215,7 +218,7 @@ public final class LocalStorage {
         final File file = new File(FILE_SYSTEM_TABLE_PATH);
         if (file.canRead()) {
             try {
-                for (final String str : org.apache.commons.io.FileUtils.readLines(file, CharEncoding.UTF_8)) {
+                for (final String str : org.apache.commons.io.FileUtils.readLines(file, StandardCharsets.UTF_8.name())) {
                     if (str.startsWith("dev_mount")) {
                         final String[] tokens = StringUtils.split(str);
                         if (tokens.length >= 3) {
@@ -255,6 +258,10 @@ public final class LocalStorage {
         return externalPublicCgeoDirectory;
     }
 
+    public static void resetExternalPublicCgeoDirectory() {
+        externalPublicCgeoDirectory = null;
+    }
+
     @NonNull
     public static File getFieldNotesDirectory() {
         return new File(getExternalPublicCgeoDirectory(), FIELD_NOTES_DIR_NAME);
@@ -263,6 +270,18 @@ public final class LocalStorage {
     @NonNull
     public static File getLegacyFieldNotesDirectory() {
         return new File(Environment.getExternalStorageDirectory(), FIELD_NOTES_DIR_NAME);
+    }
+
+    @NonNull
+    public static String getOrCreateMapDirectory() {
+        String mapDirectory = Settings.getMapFileDirectory();
+        if (mapDirectory == null) {
+            final File file = new File(getExternalPublicCgeoDirectory(), MAP_DIR_NAME);
+            FileUtils.mkdirs(file);
+            mapDirectory = file.getPath();
+            Settings.setMapFileDirectory(mapDirectory);
+        }
+        return mapDirectory;
     }
 
     @NonNull
@@ -295,9 +314,26 @@ public final class LocalStorage {
         return new File(Environment.getExternalStorageDirectory(), LEGACY_CGEO_DIR_NAME);
     }
 
+    @Nullable
+    public static File getNewBackupDirectory(final long timestamp) {
+        final File newFolder = new File(getBackupRootDirectory(), Formatter.formatDateForFilename(timestamp));
+
+        if (newFolder.exists()) {
+            return null; // We don't want to overwrite a existing backup
+        }
+
+        FileUtils.mkdirs(newFolder);
+        return newFolder;
+    }
+
     @NonNull
-    public static File getBackupDirectory() {
+    public static File getBackupRootDirectory() {
         return new File(getExternalPublicCgeoDirectory(), BACKUP_DIR_NAME);
+    }
+
+    @NonNull
+    public static File getLogfilesDirectory() {
+        return new File(getExternalPublicCgeoDirectory(), LOGFILES_DIR_NAME);
     }
 
     @NonNull
@@ -331,39 +367,56 @@ public final class LocalStorage {
         return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), CGEO_DIRNAME);
     }
 
+    public static void deleteFilesOrDirectories(final File[] files) {
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            deleteRecursive(file);
+        }
+    }
+
+    private static void deleteRecursive(final File fileOrDirectory) {
+        try {
+            if (fileOrDirectory.isDirectory()) {
+                for (File child : fileOrDirectory.listFiles()) {
+                    deleteRecursive(child);
+                }
+            }
+            fileOrDirectory.delete();
+        } catch (Exception e) {
+            Log.w("Couldn't delete " + fileOrDirectory, e);
+        }
+
+    }
+
     public static void changeExternalPrivateCgeoDir(final SettingsActivity fromActivity, final String newExtDir) {
         final Progress progress = new Progress();
         progress.show(fromActivity, fromActivity.getString(R.string.init_datadirmove_datadirmove), fromActivity.getString(R.string.init_datadirmove_running), ProgressDialog.STYLE_HORIZONTAL, null);
-        AndroidRxUtils.bindActivity(fromActivity, Observable.defer(new Callable<Observable<Boolean>>() {
-            @Override
-            public Observable<Boolean> call() {
-                final File newDataDir = new File(newExtDir, GEOCACHE_DATA_DIR_NAME);
-                final File currentDataDir = new File(getExternalPrivateCgeoDirectory(), GEOCACHE_DATA_DIR_NAME);
-                Log.i("Moving geocache data to " + newDataDir.getAbsolutePath());
-                final File[] files = currentDataDir.listFiles();
-                boolean success = true;
-                if (ArrayUtils.isNotEmpty(files)) {
-                    progress.setMaxProgressAndReset(files.length);
-                    progress.setProgress(0);
-                    for (final File geocacheDataDir : files) {
-                        success &= FileUtils.moveTo(geocacheDataDir, newDataDir);
-                        progress.incrementProgressBy(1);
-                    }
+        AndroidRxUtils.bindActivity(fromActivity, Observable.defer(() -> {
+            final File newDataDir = new File(newExtDir, GEOCACHE_DATA_DIR_NAME);
+            final File currentDataDir = new File(getExternalPrivateCgeoDirectory(), GEOCACHE_DATA_DIR_NAME);
+            Log.i("Moving geocache data to " + newDataDir.getAbsolutePath());
+            final File[] files = currentDataDir.listFiles();
+            boolean success = true;
+            if (ArrayUtils.isNotEmpty(files)) {
+                progress.setMaxProgressAndReset(files.length);
+                progress.setProgress(0);
+                for (final File geocacheDataDir : files) {
+                    success &= FileUtils.moveTo(geocacheDataDir, newDataDir);
+                    progress.incrementProgressBy(1);
                 }
-
-                Settings.setExternalPrivateCgeoDirectory(newExtDir);
-                Log.i("Ext private c:geo dir was moved to " + newExtDir);
-
-                externalPrivateCgeoDirectory = new File(newExtDir);
-                return Observable.just(success);
             }
-        }).subscribeOn(Schedulers.io())).subscribe(new Consumer<Boolean>() {
-            @Override
-            public void accept(final Boolean success) {
-                progress.dismiss();
-                final String message = success ? fromActivity.getString(R.string.init_datadirmove_success) : fromActivity.getString(R.string.init_datadirmove_failed);
-                Dialogs.message(fromActivity, R.string.init_datadirmove_datadirmove, message);
-            }
+
+            Settings.setExternalPrivateCgeoDirectory(newExtDir);
+            Log.i("Ext private c:geo dir was moved to " + newExtDir);
+
+            externalPrivateCgeoDirectory = new File(newExtDir);
+            return Observable.just(success);
+        }).subscribeOn(Schedulers.io())).subscribe(success -> {
+            progress.dismiss();
+            final String message = success ? fromActivity.getString(R.string.init_datadirmove_success) : fromActivity.getString(R.string.init_datadirmove_failed);
+            Dialogs.message(fromActivity, R.string.init_datadirmove_datadirmove, message);
         });
     }
 
@@ -375,6 +428,7 @@ public final class LocalStorage {
         final File nomedia = new File(getGeocacheDataDirectory(), ".nomedia");
         if (!nomedia.exists()) {
             try {
+                FileUtils.mkdirs(nomedia.getParentFile());
                 nomedia.createNewFile();
             } catch (final IOException e) {
                 Log.w("Couldn't create the .nomedia file in " + getGeocacheDataDirectory(), e);

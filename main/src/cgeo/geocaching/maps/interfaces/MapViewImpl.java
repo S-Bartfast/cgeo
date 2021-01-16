@@ -2,25 +2,25 @@ package cgeo.geocaching.maps.interfaces;
 
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Viewport;
-import cgeo.geocaching.maps.CachesOverlay;
-import cgeo.geocaching.maps.PositionAndScaleOverlay;
-
-import android.support.annotation.NonNull;
 
 import android.content.Context;
-import android.graphics.drawable.Drawable;
+import android.location.Location;
+import android.os.Bundle;
+import android.view.View;
+
+import androidx.annotation.NonNull;
+
+import java.util.Collection;
 
 /**
  * Defines common functions of the provider-specific
  * MapView implementations
  */
-public interface MapViewImpl {
+public interface MapViewImpl<T extends CachesOverlayItemImpl> {
 
     void setBuiltInZoomControls(boolean b);
 
     void displayZoomControls(boolean b);
-
-    void preLoad();
 
     void clearOverlays();
 
@@ -28,7 +28,6 @@ public interface MapViewImpl {
 
     void destroyDrawingCache();
 
-    @NonNull
     GeoPointImpl getMapViewCenter();
 
     int getLatitudeSpan();
@@ -37,17 +36,22 @@ public interface MapViewImpl {
 
     int getMapZoomLevel();
 
+    void zoomToBounds(Viewport bounds, GeoPointImpl center);
+
+    float getBearing();
+
     int getWidth();
 
     int getHeight();
+
+    void setDestinationCoords(Geopoint destCoords);
+    void setCoordinates(Location coordinates);
 
     MapProjectionImpl getMapProjection();
 
     Context getContext();
 
-    CachesOverlay createAddMapOverlay(Context context, Drawable drawable);
-
-    PositionAndScaleOverlay createAddPositionAndScaleOverlay(final Geopoint coords, final String geocode);
+    PositionAndHistory createAddPositionAndScaleOverlay(View root, Geopoint coords, String geocode);
 
     void setMapSource();
 
@@ -82,4 +86,27 @@ public interface MapViewImpl {
     boolean hasMapThemes();
 
     void setMapTheme();
+
+    void onMapReady(MapReadyCallback callback);
+
+    void updateItems(Collection<T> itemsPre);
+
+    boolean getCircles();
+
+    void setCircles(boolean showCircles);
+
+    void setOnTapListener(OnCacheTapListener listener);
+
+
+    /* From Google MapView documentation:
+     * Users of this class must forward all the life cycle methods from the Activity or Fragment
+     * containing this view to the corresponding ones in this class. In particular, you must
+     * forward on the following methods:
+     */
+    void onCreate(Bundle b);
+    void onResume();
+    void onPause();
+    void onDestroy();
+    void onSaveInstanceState(@NonNull Bundle b);
+    void onLowMemory();
 }

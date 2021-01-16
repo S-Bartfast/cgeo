@@ -1,25 +1,5 @@
 package cgeo.geocaching;
 
-import android.app.Activity;
-import android.app.SearchManager;
-import android.content.Intent;
-import android.content.res.Configuration;
-import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.View.OnClickListener;
-import android.widget.AutoCompleteTextView;
-import android.widget.Button;
-
-import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
-import java.util.Locale;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
 import cgeo.geocaching.activity.AbstractActionBarActivity;
 import cgeo.geocaching.address.AddressListActivity;
 import cgeo.geocaching.connector.ConnectorFactory;
@@ -38,6 +18,26 @@ import cgeo.geocaching.ui.dialog.CoordinatesInputDialog;
 import cgeo.geocaching.ui.dialog.Dialogs;
 import cgeo.geocaching.utils.EditUtils;
 import cgeo.geocaching.utils.functions.Func1;
+
+import android.app.Activity;
+import android.app.SearchManager;
+import android.content.Intent;
+import android.content.res.Configuration;
+import android.os.Bundle;
+import android.text.InputFilter;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.AutoCompleteTextView;
+import android.widget.Button;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.util.Locale;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import org.apache.commons.lang3.StringUtils;
 
 public class SearchActivity extends AbstractActionBarActivity implements CoordinatesInputDialog.CoordinateUpdate {
 
@@ -112,7 +112,7 @@ public class SearchActivity extends AbstractActionBarActivity implements Coordin
     }
 
     @Override
-    public final void onConfigurationChanged(final Configuration newConfig) {
+    public final void onConfigurationChanged(@NonNull final Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
 
         init();
@@ -188,116 +188,25 @@ public class SearchActivity extends AbstractActionBarActivity implements Coordin
     }
 
     private void init() {
-        buttonLatitude.setOnClickListener(new OnClickListener() {
+        buttonLatitude.setOnClickListener(v -> updateCoordinates());
+        buttonLongitude.setOnClickListener(v -> updateCoordinates());
 
-            @Override
-            public void onClick(final View v) {
-                updateCoordinates();
-            }
-        });
-        buttonLongitude.setOnClickListener(new OnClickListener() {
+        buttonSearchCoords.setOnClickListener(arg0 -> findByCoordsFn());
 
-            @Override
-            public void onClick(final View v) {
-                updateCoordinates();
-            }
-        });
+        setSearchAction(addressEditText, buttonSearchAddress, this::findByAddressFn, null);
+        setSearchAction(geocodeEditText, buttonSearchGeocode, this::findByGeocodeFn, DataStore::getSuggestionsGeocode);
+        setSearchAction(keywordEditText, buttonSearchKeyword, this::findByKeywordFn, DataStore::getSuggestionsKeyword);
+        setSearchAction(finderNameEditText, buttonSearchFinder, this::findByFinderFn, DataStore::getSuggestionsFinderName);
+        setSearchAction(ownerNameEditText, buttonSearchOwner, this::findByOwnerFn, DataStore::getSuggestionsOwnerName);
+        setSearchAction(trackableEditText, buttonSearchTrackable, this::findTrackableFn, DataStore::getSuggestionsTrackableCode);
 
-        buttonSearchCoords.setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(final View arg0) {
-                findByCoordsFn();
-            }
-        });
-
-        setSearchAction(addressEditText, buttonSearchAddress, new Runnable() {
-
-            @Override
-            public void run() {
-                findByAddressFn();
-            }
-        }, null);
-
-        setSearchAction(geocodeEditText, buttonSearchGeocode, new Runnable() {
-
-            @Override
-            public void run() {
-                findByGeocodeFn();
-            }
-        }, new Func1<String, String[]>() {
-
-            @Override
-            public String[] call(final String input) {
-                return DataStore.getSuggestionsGeocode(input);
-            }
-        });
-
-        setSearchAction(keywordEditText, buttonSearchKeyword, new Runnable() {
-
-            @Override
-            public void run() {
-                findByKeywordFn();
-            }
-        }, new Func1<String, String[]>() {
-
-            @Override
-            public String[] call(final String input) {
-                return DataStore.getSuggestionsKeyword(input);
-            }
-        });
-
-        setSearchAction(finderNameEditText, buttonSearchFinder, new Runnable() {
-
-            @Override
-            public void run() {
-                findByFinderFn();
-            }
-        }, new Func1<String, String[]>() {
-
-            @Override
-            public String[] call(final String input) {
-                return DataStore.getSuggestionsFinderName(input);
-            }
-        });
-
-        setSearchAction(ownerNameEditText, buttonSearchOwner, new Runnable() {
-
-            @Override
-            public void run() {
-                findByOwnerFn();
-            }
-        }, new Func1<String, String[]>() {
-
-            @Override
-            public String[] call(final String input) {
-                return DataStore.getSuggestionsOwnerName(input);
-            }
-        });
-
-        setSearchAction(trackableEditText, buttonSearchTrackable, new Runnable() {
-
-            @Override
-            public void run() {
-                findTrackableFn();
-            }
-        }, new Func1<String, String[]>() {
-
-            @Override
-            public String[] call(final String input) {
-                return DataStore.getSuggestionsTrackableCode(input);
-            }
-        });
+        geocodeEditText.setFilters(new InputFilter[] { new InputFilter.AllCaps() });
+        trackableEditText.setFilters(new InputFilter[] { new InputFilter.AllCaps() });
     }
 
     private static void setSearchAction(final AutoCompleteTextView editText, final Button button, @NonNull final Runnable runnable, @Nullable final Func1<String, String[]> suggestionFunction) {
         EditUtils.setActionListener(editText, runnable);
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(final View arg0) {
-                runnable.run();
-            }
-        });
+        button.setOnClickListener(arg0 -> runnable.run());
         if (suggestionFunction != null) {
             editText.setAdapter(new AutoCompleteAdapter(editText.getContext(), android.R.layout.simple_dropdown_item_1line, suggestionFunction));
         }
@@ -313,6 +222,11 @@ public class SearchActivity extends AbstractActionBarActivity implements Coordin
     public void updateCoordinates(final Geopoint gp) {
         buttonLatitude.setText(gp.format(GeopointFormatter.Format.LAT_DECMINUTE));
         buttonLongitude.setText(gp.format(GeopointFormatter.Format.LON_DECMINUTE));
+    }
+
+    @Override
+    public boolean supportsNullCoordinates() {
+        return false;
     }
 
     private void findByCoordsFn() {
@@ -391,7 +305,11 @@ public class SearchActivity extends AbstractActionBarActivity implements Coordin
             return;
         }
 
-        CacheDetailActivity.startActivity(this, geocodeText.toUpperCase(Locale.US));
+        if (ConnectorFactory.anyConnectorActive()) {
+            CacheDetailActivity.startActivity(this, geocodeText.toUpperCase(Locale.US));
+        } else {
+            showToast(getString(R.string.warn_no_connector));
+        }
     }
 
     private void findTrackableFn() {
@@ -402,9 +320,16 @@ public class SearchActivity extends AbstractActionBarActivity implements Coordin
             return;
         }
 
-        final Intent trackablesIntent = new Intent(this, TrackableActivity.class);
-        trackablesIntent.putExtra(Intents.EXTRA_GEOCODE, trackableText.toUpperCase(Locale.US));
-        startActivity(trackablesIntent);
+        // check temporaribly disabled due to #7617
+        // if (ConnectorFactory.anyTrackableConnectorActive()) {
+            final Intent trackablesIntent = new Intent(this, TrackableActivity.class);
+            trackablesIntent.putExtra(Intents.EXTRA_GEOCODE, trackableText.toUpperCase(Locale.US));
+            startActivity(trackablesIntent);
+        /*
+        } else {
+            showToast(getString(R.string.warn_no_connector));
+        }
+        */
     }
 
     @Override

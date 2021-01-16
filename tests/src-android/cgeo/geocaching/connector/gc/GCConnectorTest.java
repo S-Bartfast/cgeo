@@ -1,7 +1,5 @@
 package cgeo.geocaching.connector.gc;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.SearchResult;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.ConnectorFactoryTest;
@@ -17,6 +15,8 @@ import cgeo.geocaching.test.AbstractResourceInstrumentationTestCase;
 import java.util.Set;
 
 import org.assertj.core.api.AbstractBooleanAssert;
+import static org.assertj.core.api.Java6Assertions.assertThat;
+
 
 public class GCConnectorTest extends AbstractResourceInstrumentationTestCase {
 
@@ -30,21 +30,30 @@ public class GCConnectorTest extends AbstractResourceInstrumentationTestCase {
             Settings.setCacheType(CacheType.ALL);
             GCLogin.getInstance().login();
 
-            final MapTokens tokens = GCLogin.getInstance().getMapTokens();
-
             {
                 final Viewport viewport = new Viewport(new Geopoint("N 52° 25.369 E 9° 35.499"), new Geopoint("N 52° 25.600 E 9° 36.200"));
-                final SearchResult searchResult = ConnectorFactory.searchByViewport(viewport, tokens);
+                final SearchResult searchResult = ConnectorFactory.searchByViewport(viewport);
                 assertThat(searchResult).isNotNull();
                 assertThat(searchResult.isEmpty()).isFalse();
-                assertThat(searchResult.getGeocodes()).contains("GC4ER5H");
+                assertThat(searchResult.getGeocodes()).contains("GC1J1CT");
+                assertThat(searchResult.getGeocodes()).doesNotContain("GC4ER5H");
             }
 
             {
-                final Viewport viewport = new Viewport(new Geopoint("N 52° 24.000 E 9° 34.500"), new Geopoint("N 52° 26.000 E 9° 38.500"));
-                final SearchResult searchResult = ConnectorFactory.searchByViewport(viewport, tokens);
+                final Viewport viewport = new Viewport(new Geopoint("N 51° 36.000 E 7° 50.500"), new Geopoint("N 51° 37.350 E7° 51.500"));
+                final SearchResult searchResult = ConnectorFactory.searchByViewport(viewport);
                 assertThat(searchResult).isNotNull();
-                assertThat(searchResult.getGeocodes()).contains("GC4ER5H");
+                assertThat(searchResult.getGeocodes()).contains("GC75NF6"); // N 51° 37.320 E 007° 50.600
+
+                // redo search with a smaller viewport completely contained in the last one - should lead to an identical searchResult due to caching
+                final Viewport viewport2 = new Viewport(new Geopoint("N 51° 36.500 E 7° 51.200"), new Geopoint("N 51° 36.750 E7° 51.400"));
+                final SearchResult searchResult2 = ConnectorFactory.searchByViewport(viewport2);
+                assertThat(searchResult.equals(searchResult2));
+
+                // redo search with a way bigger viewport - caching does not help here, so a new searchResult should be delivered
+                final Viewport viewport3 = new Viewport(new Geopoint("N 51° 35.000 E 7° 50.000"), new Geopoint("N 51° 38.000 E7° 52.000"));
+                final SearchResult searchResult3 = ConnectorFactory.searchByViewport(viewport3);
+                assertThat(!searchResult.equals(searchResult3));
             }
         } finally {
             // restore user settings
@@ -74,14 +83,6 @@ public class GCConnectorTest extends AbstractResourceInstrumentationTestCase {
      */
     public static void testCanNotHandleTrackablesAnymore() {
         assertCanHandle("TB3F651").isFalse();
-    }
-
-    public static void testBaseCodings() {
-        assertThat(GCConstants.gccodeToGCId("GC2MEGA")).isEqualTo(2045702);
-    }
-
-    public static void testBaseCodingsNull() {
-        assertThat(GCConstants.gccodeToGCId(null)).isEqualTo(0);
     }
 
     /** Tile computation with different zoom levels */

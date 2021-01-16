@@ -1,32 +1,37 @@
 package cgeo.geocaching.utils;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
-import android.text.Html;
+import cgeo.geocaching.CgeoApplication;
+import cgeo.geocaching.R;
+import cgeo.geocaching.models.Geocache;
+
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StrikethroughSpan;
 
-import java.nio.charset.Charset;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.text.HtmlCompat;
+
+import java.nio.charset.StandardCharsets;
 import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 
-import cgeo.geocaching.CgeoApplication;
-import cgeo.geocaching.R;
-import cgeo.geocaching.models.Geocache;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * Misc. utils. All methods don't use Android specific stuff to use these methods in plain JUnit tests.
  */
 public final class TextUtils {
-
-    public static final Charset CHARSET_UTF8 = Charset.forName("UTF-8");
-    public static final Charset CHARSET_ASCII = Charset.forName("US-ASCII");
 
     /**
      * a Collator instance appropriate for comparing strings using the default locale while ignoring the casing
@@ -34,6 +39,11 @@ public final class TextUtils {
     public static final Collator COLLATOR = getCollator();
 
     private static final Pattern PATTERN_REMOVE_NONPRINTABLE = Pattern.compile("\\p{Cntrl}");
+
+    /**
+     * Internal cache for created Patterns (avoids parsing them unnecessarily often)
+     */
+    private static final Map<String, Pattern> PATTERN_CACHE = Collections.synchronizedMap(new HashMap<>());
 
     private TextUtils() {
         // utility class
@@ -161,6 +171,16 @@ public final class TextUtils {
     }
 
     /**
+     * @param str input string
+     *            As of performance reasons we non't use a REGEX here. Don't use this function for strings which could contain new-line characters like "\r\n" or "\r"
+     * @return normalized String Length like it is counted at the gc website (count UNIX new-line character "\n" as two characters)
+     */
+    public static int getNormalizedStringLength (@NonNull final String str) {
+        final String newStr = str.trim();
+        return StringUtils.countMatches(newStr, "\n") + newStr.length();
+    }
+
+    /**
      * Quick and naive check for possible rich HTML content in a string.
      *
      * @param str
@@ -191,7 +211,7 @@ public final class TextUtils {
      */
     public static long checksum(final String input) {
         final CRC32 checksum = new CRC32();
-        checksum.update(input.getBytes(CHARSET_UTF8));
+        checksum.update(input.getBytes(StandardCharsets.UTF_8));
         return checksum.getValue();
     }
 
@@ -208,7 +228,7 @@ public final class TextUtils {
     }
 
     /**
-     * When converting html to text using {@link Html#fromHtml(String)} then the result often contains unwanted trailing
+     * When converting html to text using {@link HtmlCompat#fromHtml(String, int)} then the result often contains unwanted trailing
      * linebreaks (from the conversion of paragraph tags). This method removes those.
      */
     public static CharSequence trimSpanned(final Spanned source) {
@@ -216,6 +236,7 @@ public final class TextUtils {
         int i = length;
 
         // loop back to the first non-whitespace character
+        //noinspection StatementWithEmptyBody
         while (--i >= 0 && Character.isWhitespace(source.charAt(i))) {
         }
 
@@ -233,7 +254,7 @@ public final class TextUtils {
      * @return a string without any HTML markup
      */
     public static String stripHtml(final String html) {
-        return containsHtml(html) ? trimSpanned(Html.fromHtml(html)).toString() : html;
+        return containsHtml(html) ? trimSpanned(HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_LEGACY)).toString() : html;
     }
 
     public static SpannableString coloredCacheText(@NonNull final Geocache cache, @NonNull final String text) {
@@ -246,4 +267,200 @@ public final class TextUtils {
         }
         return span;
     }
+
+    @NonNull
+    public static String getTextBeforeIndexUntil(final String text, final int idx, final String startToken) {
+        return getTextBeforeIndexUntil(text, idx, startToken, -1);
+    }
+
+    @NonNull
+    public static String getTextAfterIndexUntil(final String text, final int idx, final String endToken) {
+        return getTextAfterIndexUntil(text, idx, endToken, -1);
+    }
+
+    /**
+     * Returns substring of text before (and excluding) given 'idx' until one of given conditions is met
+     *
+     * @param text       text to work on
+     * @param idx        idx to start checking
+     * @param startToken if not null, return text until (and excluding) this token is found
+     * @param maxLength  if >=0, text is truncated to given max length
+     * @return found text or empty string. Never null.
+     */
+    @NonNull
+    public static String getTextBeforeIndexUntil(final String text, final int idx, final String startToken, final int maxLength) {
+        if (StringUtils.isEmpty(text) || idx <= 0) {
+            return "";
+        }
+        String before = text.substring(0, Math.min(idx, text.length()));
+
+        if (!StringUtils.isEmpty(startToken)) {
+            final int tokenIdx = before.lastIndexOf(startToken);
+            if (tokenIdx >= 0) {
+                before = before.substring(tokenIdx + startToken.length());
+            }
+        }
+        return (maxLength >= 0 && before.length() > maxLength) ? before.substring(before.length() - maxLength) : before;
+    }
+
+    /**
+     * Returns substring of text after (and excluding) given 'idx' until one of given conditions is met
+     *
+     * @param text      text to work on
+     * @param idx       idx to start checking
+     * @param endToken  if not null, return text until (and excluding) this token is found
+     * @param maxLength if >=0, text is truncated to given max length
+     * @return found text or empty string. Never null.
+     */
+    @NonNull
+    public static String getTextAfterIndexUntil(final String text, final int idx, final String endToken, final int maxLength) {
+        if (StringUtils.isEmpty(text) || idx >= text.length() - 1) {
+            return "";
+        }
+        String after = text.substring(idx < 0 ? 0 : idx + 1);
+        if (!StringUtils.isEmpty(endToken)) {
+            final int tokenIdx = after.indexOf(endToken);
+            if (tokenIdx >= 0) {
+                after = after.substring(0, tokenIdx);
+            }
+        }
+        return (maxLength >= 0 && after.length() > maxLength) ? after.substring(0, maxLength) : after;
+    }
+
+    /**
+     * Tries to find the next value in 'text' which is delimited (beginning and end) with given ÄdelimiterChar and
+     * returns text inside these delimiters. In this text, occurences of both 'escapedChar' or 'delimiterChar' can
+     * be escaped with 'escapedChar' to get them into the indelimited text.
+     * Method returns null if no delimited value is found.
+     * This is the 'inverse' function to {@link #createDelimitedValue(String, char, char)}
+     */
+    public static String parseNextDelimitedValue(@NonNull final String text, final char delimiterChar, final char escapeChar) {
+        final String quotedDelim = "\\" + delimiterChar;
+        final String quotedEsc = "\\" + escapeChar;
+
+        final Pattern findNextPattern =
+                compilePattern("(?s)" + quotedDelim +
+                        "((?:" + quotedEsc + ".|" +
+                        "[^" + quotedEsc + quotedDelim + "]++)*)" + quotedDelim);
+
+        final Matcher m = findNextPattern.matcher(text);
+        if (m.find()) {
+            return compilePattern(quotedEsc + "(.)").matcher(m.group(1)).replaceAll("$1");
+        }
+        return null;
+    }
+
+    /**
+     * Returns a delimited version of given 'text' using given 'delimiterChar'. Occurences of 'delimiterChar' are
+     * escaped with given 'escapeChar'. Occurences of 'escapedChar' are also escaped with 'escapedChar'.
+     * This is the 'inverse' function to {@link #parseNextDelimitedValue(String, char, char)}
+     */
+    @NonNull
+    public static String createDelimitedValue(@NonNull final String text, final char delimiterChar, final char escapeChar) {
+        final String quotedDelim = "\\" + delimiterChar;
+        final String quotedEsc = "\\" + escapeChar;
+        return delimiterChar + compilePattern("([" + quotedDelim + quotedEsc + "])").matcher(text).replaceAll(quotedEsc + "$1") + delimiterChar;
+    }
+
+    /**
+     * Returns text split into its single words (a word being a continuous group of non-whitespace-characters).
+     * Leadig/trailing whitespaces are omitted. blank string (or null string) results in empty array.
+     *
+     * @param text text to split
+     * @return splited into words
+     */
+    @NonNull
+    public static String[] getWords(final String text) {
+        final String theText = text == null ? "" : text.trim();
+        if (theText.isEmpty()) {
+            return new String[0];
+        }
+        return compilePattern("\\s+").split(theText);
+    }
+
+    /**
+     * Replaces all occurences of texts starting with 'startToken' and ending with 'endTOken' with given 'replacement'.
+     * Note that 'replacement' is interpreted as regex as defined in {@link String#replaceAll(String, String)}}.
+     * In replacmenent, '$1' may be used to reference the replaced text inside the tokens
+     * it is assured that for same parameters, matches are always the same as in {@link #getAll(String, String, String)}.
+     *
+     * @param text        text to do replacement in
+     * @param startToken  starttoken. if blank then "starttoken" is assumed to be start of text
+     * @param endToken    starttoken. if blank then "endtoken" is assumed to be end of text
+     * @param replacement replacements
+     * @return text with replacements
+     */
+    @NonNull
+    public static String replaceAll(final String text, final String startToken, final String endToken, final String replacement) {
+        if (text == null) {
+            return "";
+        }
+        return getTokenSearchPattern(startToken, endToken).matcher(text).replaceAll(replacement);
+    }
+
+    /**
+     * Gets all text occurences starting with 'startToken' and ending with 'endToken'.
+     * it is assured that for same parameters, matches are always the same as in {@link #replaceAll(String, String, String, String)}.
+     *
+     * @param text       text to search in
+     * @param startToken starttoken. if blank then "starttoken" is assumed to be start of text
+     * @param endToken   starttoken. if blank then "endtoken" is assumed to be end of text
+     * @return array of found matches
+     */
+    @NonNull
+    public static List<String> getAll(final String text, final String startToken, final String endToken) {
+        if (text == null) {
+            return Collections.emptyList();
+        }
+        final Matcher m = getTokenSearchPattern(startToken, endToken).matcher(text);
+        final List<String> result = new ArrayList<>();
+        while (m.find()) {
+            result.add(m.group(1));
+        }
+        return result;
+    }
+
+    /**
+     * Shortens a given text to a maximum given number of characters. In case the text is too long it
+     * is shortened according to a given begin-end-distribution-value. Deleted text part is marked with '...'
+     * @param text text to shorten. If text is shorter than maxLength it remains unchanged
+     * @param maxLength maxLength to shorten text to.
+     * @param beginEndDistribution begin-end-distribution to obey on shortening. If >=1 then text is shortened at the end.
+     *      If <=0 then text is shortened at the beginning. If between 0-1 then text is shortened at beginning and end in relation to this value.
+     * @return the shortened text
+     */
+    @NonNull
+    public static String shortenText(final String text, final int maxLength, final float beginEndDistribution) {
+        final String separator = "...";
+        if (StringUtils.isBlank(text) || maxLength < 0) {
+            return "";
+        }
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        if (maxLength < separator.length()) {
+            return text.substring(0, maxLength);
+        }
+        final int charsAtBegin = Math.max(0, Math.min(maxLength - separator.length(), (int) ((maxLength - separator.length()) * beginEndDistribution)));
+        final int charsAtEnd = maxLength - separator.length() - charsAtBegin;
+
+        return text.substring(0, charsAtBegin) + separator + text.substring(text.length() - charsAtEnd);
+
+    }
+
+    private static Pattern getTokenSearchPattern(final String startToken, final String endToken) {
+        return compilePattern("(?s)" + (StringUtils.isEmpty(startToken) ? "^" : Pattern.quote(startToken)) + "(.*?)" +
+                (StringUtils.isEmpty(endToken) ? "$" : Pattern.quote(endToken)));
+    }
+
+    private static Pattern compilePattern(final String patternString) {
+
+        Pattern pattern = PATTERN_CACHE.get(patternString);
+        if (pattern == null) {
+            pattern = Pattern.compile(patternString);
+            PATTERN_CACHE.put(patternString, pattern);
+        }
+        return pattern;
+    }
+
 }

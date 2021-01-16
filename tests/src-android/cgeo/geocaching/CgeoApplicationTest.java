@@ -1,14 +1,10 @@
 package cgeo.geocaching;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.CGeoTestCase;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.connector.gc.GCLogin;
 import cgeo.geocaching.connector.gc.GCMemberState;
 import cgeo.geocaching.connector.gc.GCParser;
-import cgeo.geocaching.connector.gc.MapTokens;
-import cgeo.geocaching.connector.gc.Tile;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.enumerations.LoadFlags;
 import cgeo.geocaching.enumerations.StatusCode;
@@ -16,19 +12,16 @@ import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.location.Viewport;
 import cgeo.geocaching.log.LogEntry;
 import cgeo.geocaching.log.LogType;
-import cgeo.geocaching.maps.LivemapStrategy;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.Trackable;
 import cgeo.geocaching.settings.Credentials;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.settings.TestSettings;
 import cgeo.geocaching.storage.DataStore;
-import cgeo.geocaching.test.mock.GC1ZXX2;
 import cgeo.geocaching.test.mock.GC2JVEH;
 import cgeo.geocaching.test.mock.GC3FJ5F;
 import cgeo.geocaching.test.mock.MockedCache;
 import cgeo.geocaching.utils.DisposableHandler;
-import cgeo.geocaching.utils.Log;
 import cgeo.test.Compare;
 
 import android.test.suitebuilder.annotation.MediumTest;
@@ -36,14 +29,13 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import java.util.GregorianCalendar;
 
+import static org.assertj.core.api.Java6Assertions.assertThat;
+
 /**
  * The c:geo application test. It can be used for tests that require an
  * application and/or context.
  */
 public class CgeoApplicationTest extends CGeoTestCase {
-
-    private static final MapTokens INVALID_TOKEN = null;
-
     /**
      * The name 'test preconditions' is a convention to signal that if this test
      * doesn't pass, the test case was not set up properly and it might explain
@@ -76,14 +68,17 @@ public class CgeoApplicationTest extends CGeoTestCase {
         // fix data
         assertThat(tb.getGuid()).isEqualTo("aefffb86-099f-444f-b132-605436163aa8");
         assertThat(tb.getGeocode()).isEqualTo("TB2J1VZ");
-        assertThat(tb.getIconUrl()).endsWith("://www.geocaching.com/images/wpttypes/21.gif");
+        assertThat(tb.getIconUrl()).endsWith("://www.geocaching.com/images/WptTypes/21.gif");
         assertThat(tb.getName()).isEqualTo("blafoo's Children Music CD");
         assertThat(tb.getType()).isEqualTo("Travel Bug Dog Tag");
         assertThat(tb.getReleased()).isEqualTo(new GregorianCalendar(2009, 8 - 1, 24).getTime());
+        assertThat(tb.getLogDate()).isNull();
+        assertThat(tb.getLogType()).isNull();
+        assertThat(tb.getLogGuid()).isNull();
         assertThat(tb.getOrigin()).isEqualTo("Niedersachsen, Germany");
         assertThat(tb.getOwner()).isEqualTo("blafoo");
         assertThat(tb.getOwnerGuid()).isEqualTo("0564a940-8311-40ee-8e76-7e91b2cf6284");
-        assertThat(tb.getGoal()).isEqualTo("Kinder erfreuen.<br /><br />Make children happy.");
+        assertThat(tb.getGoal()).isEqualTo("Kinder erfreuen.<br><br>Make children happy.");
         assertThat(tb.getDetails()).startsWith("Auf der CD sind");
         // the host of the image can vary
         assertThat(tb.getImage()).endsWith("geocaching.com/track/large/38382780-87a7-4393-8393-78841678ee8c.jpg");
@@ -114,7 +109,7 @@ public class CgeoApplicationTest extends CGeoTestCase {
     public static Geocache testSearchByGeocode(final String geocode) {
         final SearchResult search = Geocache.searchByGeocode(geocode, null, true, null);
         assertThat(search).isNotNull();
-        if (Settings.isGCPremiumMember() || search.getError() == StatusCode.NO_ERROR) {
+        if (Settings.isGCPremiumMember() || search.getError() == StatusCode.NO_ERROR || search.getError() == StatusCode.PREMIUM_ONLY) {
             assertThat(search.getGeocodes()).containsExactly(geocode);
             return DataStore.loadCache(geocode, LoadFlags.LOAD_CACHE_OR_DB);
         }
@@ -155,54 +150,41 @@ public class CgeoApplicationTest extends CGeoTestCase {
      */
     @MediumTest
     public static void testSearchByGeocodeNotLoggedIn() {
-        withMockedLoginDo(new Runnable() {
+        withMockedLoginDo(() -> {
+            // non premium cache
+            MockedCache cache = new GC3FJ5F();
 
-            @Override
-            public void run() {
-                // non premium cache
-                MockedCache cache = new GC3FJ5F();
+            deleteCacheFromDBAndLogout(cache.getGeocode());
 
-                deleteCacheFromDBAndLogout(cache.getGeocode());
+            SearchResult search = Geocache.searchByGeocode(cache.getGeocode(), null, true, null);
+            assertThat(search).isNotNull();
+            assertThat(search.getGeocodes()).containsExactly(cache.getGeocode());
+            Geocache searchedCache = search.getFirstCacheFromResult(LoadFlags.LOAD_CACHE_OR_DB);
+            // coords must be null if the user is not logged in
+            assertThat(searchedCache).isNotNull();
+            assertThat(searchedCache.getCoords()).isNull();
 
-                SearchResult search = Geocache.searchByGeocode(cache.getGeocode(), null, true, null);
-                assertThat(search).isNotNull();
-                assertThat(search.getGeocodes()).containsExactly(cache.getGeocode());
-                final Geocache searchedCache = search.getFirstCacheFromResult(LoadFlags.LOAD_CACHE_OR_DB);
-                // coords must be null if the user is not logged in
-                assertThat(searchedCache).isNotNull();
-                assert searchedCache != null; // eclipse bug
-                assertThat(searchedCache.getCoords()).isNull();
+            // premium cache. Not fully visible to guests
+            cache = new GC2JVEH();
 
-                // premium cache. Not visible to guests
-                cache = new GC2JVEH();
+            deleteCacheFromDBAndLogout(cache.getGeocode());
 
-                deleteCacheFromDBAndLogout(cache.getGeocode());
-
-                search = Geocache.searchByGeocode(cache.getGeocode(), null, true, null);
-                assertThat(search).isNotNull();
-                assertThat(search.getGeocodes()).isEmpty();
-            }
-        });
-    }
-
-    /**
-     * Test {@link Geocache#searchByGeocode(String, String, boolean, DisposableHandler)}
-     */
-    @MediumTest
-    public static void testSearchErrorOccured() {
-        withMockedLoginDo(new Runnable() {
-
-            @Override
-            public void run() {
-                // non premium cache
-                final MockedCache cache = new GC1ZXX2();
-
-                deleteCacheFromDBAndLogout(cache.getGeocode());
-
-                final SearchResult search = Geocache.searchByGeocode(cache.getGeocode(), null, true, null);
-                assertThat(search).isNotNull();
-                assertThat(search.getGeocodes()).isEmpty();
-            }
+            search = Geocache.searchByGeocode(cache.getGeocode(), null, true, null);
+            assertThat(search).isNotNull();
+            searchedCache = search.getFirstCacheFromResult(LoadFlags.LOAD_CACHE_OR_DB);
+            assertThat(searchedCache).isNotNull();
+            assertThat(searchedCache.getCoords()).isNull();
+            assertThat(searchedCache.getName()).isEqualTo(cache.getName());
+            assertThat(searchedCache.getDifficulty()).isEqualTo(cache.getDifficulty());
+            assertThat(searchedCache.getTerrain()).isEqualTo(cache.getTerrain());
+            assertThat(searchedCache.getGeocode()).isEqualTo(cache.getGeocode());
+            assertThat(searchedCache.getOwnerDisplayName()).isEqualTo(cache.getOwnerDisplayName());
+            // for PM only caches we can only parse the owner display name which is therefore set as user id too
+            assertThat(searchedCache.getOwnerUserId()).isEqualTo(cache.getOwnerDisplayName());
+            assertThat(searchedCache.getSize()).isEqualTo(cache.getSize());
+            assertThat(searchedCache.getType()).isEqualTo(cache.getType());
+            // it's not possible in guest sessions to distinguish whether a PM-only cache is disabled or archived
+            assertThat(searchedCache.isDisabled()).isEqualTo(cache.isDisabled() || cache.isArchived());
         });
     }
 
@@ -233,15 +215,11 @@ public class CgeoApplicationTest extends CGeoTestCase {
      */
     @MediumTest
     public static void testSearchByCoords() {
-        withMockedFilters(new Runnable() {
-
-            @Override
-            public void run() {
-                final SearchResult search = GCParser.searchByCoords(new Geopoint("N 50° 06.654 E 008° 39.777"), CacheType.MYSTERY);
-                assertThat(search).isNotNull();
-                assertThat(search.getGeocodes().size()).isGreaterThanOrEqualTo(20);
-                assertThat(search.getGeocodes()).contains("GC1HBMY");
-            }
+        withMockedFilters(() -> {
+            final SearchResult search = GCParser.searchByCoords(new Geopoint("N 50° 06.654 E 008° 39.777"), CacheType.MYSTERY);
+            assertThat(search).isNotNull();
+            assertThat(search.getGeocodes().size()).isGreaterThanOrEqualTo(20);
+            assertThat(search.getGeocodes()).contains("GC1HBMY");
         });
     }
 
@@ -250,15 +228,11 @@ public class CgeoApplicationTest extends CGeoTestCase {
      */
     @MediumTest
     public static void testSearchByOwner() {
-        withMockedFilters(new Runnable() {
-
-            @Override
-            public void run() {
-                final SearchResult search = GCParser.searchByOwner("blafoo", CacheType.MYSTERY);
-                assertThat(search).isNotNull();
-                assertThat(search.getGeocodes()).hasSize(7);
-                assertThat(search.getGeocodes()).contains("GC36RT6");
-            }
+        withMockedFilters(() -> {
+            final SearchResult search = GCParser.searchByOwner("Lineflyer", CacheType.EARTH);
+            assertThat(search).isNotNull();
+            assertThat(search.getGeocodes()).hasSize(6);
+            assertThat(search.getGeocodes()).contains("GC7J99X");
         });
     }
 
@@ -267,147 +241,47 @@ public class CgeoApplicationTest extends CGeoTestCase {
      */
     @MediumTest
     public static void testSearchByUsername() {
-        withMockedFilters(new Runnable() {
-
-            @Override
-            public void run() {
-                final SearchResult search = GCParser.searchByUsername("blafoo", CacheType.WEBCAM);
-                assertThat(search).isNotNull();
-                assertThat(search.getTotalCountGC()).isEqualTo(7);
-                assertThat(search.getGeocodes()).contains("GCP0A9");
-            }
+        withMockedFilters(() -> {
+            final SearchResult search = GCParser.searchByUsername("blafoo", CacheType.WEBCAM);
+            assertThat(search).isNotNull();
+            assertThat(search.getTotalCountGC()).isEqualTo(10);
+            assertThat(search.getGeocodes()).contains("GCP0A9");
         });
     }
 
     /**
-     * Test {@link ConnectorFactory#searchByViewport(Viewport, MapTokens)}
+     * Test {@link ConnectorFactory#searchByViewport(Viewport)}
      */
     @MediumTest
     public static void testSearchByViewport() {
-        withMockedFilters(new Runnable() {
+        withMockedFilters(() -> {
+            // backup user settings
+            final CacheType cacheType = Settings.getCacheType();
 
-            @Override
-            public void run() {
-                // backup user settings
-                final LivemapStrategy strategy = Settings.getLiveMapStrategy();
-                final CacheType cacheType = Settings.getCacheType();
+            try {
+                // set up settings required for test
+                TestSettings.setExcludeMine(false);
+                Settings.setCacheType(CacheType.ALL);
 
-                try {
-                    // set up settings required for test
-                    TestSettings.setExcludeMine(false);
-                    Settings.setCacheType(CacheType.ALL);
+                final GC3FJ5F mockedCache = new GC3FJ5F();
+                deleteCacheFromDB(mockedCache.getGeocode());
 
-                    final GC3FJ5F mockedCache = new GC3FJ5F();
-                    deleteCacheFromDB(mockedCache.getGeocode());
+                final Viewport viewport = new Viewport(mockedCache, 0.003, 0.003);
 
-                    final MapTokens tokens = GCLogin.getInstance().getMapTokens();
-                    final Viewport viewport = new Viewport(mockedCache, 0.003, 0.003);
+                // check coords
+                final SearchResult search = ConnectorFactory.searchByViewport(viewport);
+                assertThat(search).isNotNull();
+                assertThat(search.getGeocodes()).contains(mockedCache.getGeocode());
+                final Geocache parsedCache = DataStore.loadCache(mockedCache.getGeocode(), LoadFlags.LOAD_CACHE_OR_DB);
+                assert parsedCache != null;
+                assertThat(parsedCache).isNotNull();
 
-                    // check coords for DETAILED
-                    Settings.setLiveMapStrategy(LivemapStrategy.DETAILED);
-                    SearchResult search = ConnectorFactory.searchByViewport(viewport, tokens);
-                    assertThat(search).isNotNull();
-                    assertThat(search.getGeocodes()).contains(mockedCache.getGeocode());
-                    Geocache parsedCache = DataStore.loadCache(mockedCache.getGeocode(), LoadFlags.LOAD_CACHE_OR_DB);
-                    assert parsedCache != null;
-                    assertThat(parsedCache).isNotNull();
+                assertThat(mockedCache.getCoords().equals(parsedCache.getCoords()));
+                assertThat(parsedCache.isReliableLatLon()).isEqualTo(true);
 
-                    assertThat(mockedCache.getCoords().equals(parsedCache.getCoords())).isEqualTo(Settings.isGCPremiumMember());
-                    assertThat(parsedCache.isReliableLatLon()).isEqualTo(Settings.isGCPremiumMember());
-
-                    // check update after switch strategy to FAST
-                    Settings.setLiveMapStrategy(LivemapStrategy.FAST);
-                    Tile.cache.removeFromTileCache(mockedCache);
-
-                    search = ConnectorFactory.searchByViewport(viewport, tokens);
-                    assertThat(search).isNotNull();
-                    assertThat(search.getGeocodes()).contains(mockedCache.getGeocode());
-                    parsedCache = DataStore.loadCache(mockedCache.getGeocode(), LoadFlags.LOAD_CACHE_OR_DB);
-                    assert parsedCache != null;
-                    assertThat(parsedCache).isNotNull();
-
-                    assertThat(mockedCache.getCoords().equals(parsedCache.getCoords())).isEqualTo(Settings.isGCPremiumMember());
-                    assertThat(parsedCache.isReliableLatLon()).isEqualTo(Settings.isGCPremiumMember());
-
-                } finally {
-                    // restore user settings
-                    Settings.setLiveMapStrategy(strategy);
-                    Settings.setCacheType(cacheType);
-                }
-            }
-        });
-    }
-
-    /**
-     * Test {@link ConnectorFactory#searchByViewport(Viewport, MapTokens)}
-     */
-    @MediumTest
-    public static void testSearchByViewportNotLoggedIn() {
-        withMockedLoginDo(new Runnable() {
-
-            @Override
-            public void run() {
-                final LivemapStrategy strategy = Settings.getLiveMapStrategy();
-                final LivemapStrategy testStrategy = LivemapStrategy.FAST; // FASTEST, FAST or DETAILED for tests
-                Settings.setLiveMapStrategy(testStrategy);
-                final CacheType cacheType = Settings.getCacheType();
-
-                try {
-                    { // non premium cache
-                        final MockedCache cache = new GC3FJ5F();
-                        deleteCacheFromDBAndLogout(cache.getGeocode());
-                        Tile.cache.removeFromTileCache(cache);
-                        Settings.setCacheType(CacheType.ALL);
-
-                        final Viewport viewport = new Viewport(cache, 0.003, 0.003);
-                        final SearchResult search = ConnectorFactory.searchByViewport(viewport, INVALID_TOKEN);
-
-                        assertThat(search).isNotNull();
-                        assertThat(search.getGeocodes()).contains(cache.getGeocode());
-                        // coords differ
-                        final Geocache cacheFromViewport = DataStore.loadCache(cache.getGeocode(), LoadFlags.LOAD_CACHE_OR_DB);
-                        assert cacheFromViewport != null;
-                        assertThat(cacheFromViewport).isNotNull();
-                        Log.d("cgeoApplicationTest.testSearchByViewportNotLoggedIn: Coords expected = " + cache.getCoords());
-                        Log.d("cgeoApplicationTest.testSearchByViewportNotLoggedIn: Coords actual = " + cacheFromViewport.getCoords());
-                        assertThat(cache.getCoords().distanceTo(cacheFromViewport.getCoords())).isGreaterThan(1e-4f);
-                        // depending on the chosen strategy the coords can be reliable or not
-                        // noinspection ConstantConditions
-                        assertThat(cacheFromViewport.isReliableLatLon()).isEqualTo(testStrategy == LivemapStrategy.DETAILED);
-                    }
-
-                    { // premium cache
-                        final MockedCache cache = new MockedCache(new Geopoint(49.010183, 2.566117)) {
-                            @Override
-                            public String getGeocode() {
-                                return "GC1K1W4";
-                            }
-                        };
-                        deleteCacheFromDBAndLogout(cache.getGeocode());
-                        Tile.cache.removeFromTileCache(cache);
-                        Settings.setCacheType(CacheType.ALL);
-
-                        final Viewport viewport = new Viewport(cache, 0.003, 0.003);
-                        final SearchResult search = ConnectorFactory.searchByViewport(viewport, INVALID_TOKEN);
-
-                        assertThat(search).isNotNull();
-                        assertThat(search.getGeocodes()).contains(cache.getGeocode());
-                        // coords differ
-                        final Geocache cacheFromViewport = DataStore.loadCache(cache.getGeocode(), LoadFlags.LOAD_CACHE_OR_DB);
-                        assert cacheFromViewport != null;
-                        assertThat(cacheFromViewport).isNotNull();
-                        Log.d("cgeoApplicationTest.testSearchByViewportNotLoggedIn: Coords expected = " + cache.getCoords());
-                        Log.d("cgeoApplicationTest.testSearchByViewportNotLoggedIn: Coords actual = " + cacheFromViewport.getCoords());
-                        assertThat(cache.getCoords().distanceTo(cacheFromViewport.getCoords()) <= 1e-3).isFalse();
-                        // depending on the chosen strategy the coords can be reliable or not
-                        // noinspection ConstantConditions
-                        assertThat(cacheFromViewport.isReliableLatLon()).isEqualTo(testStrategy == LivemapStrategy.DETAILED);
-                    }
-
-                } finally {
-                    Settings.setLiveMapStrategy(strategy);
-                    Settings.setCacheType(cacheType);
-                }
+            } finally {
+                // restore user settings
+                Settings.setCacheType(cacheType);
             }
         });
     }
@@ -439,6 +313,7 @@ public class CgeoApplicationTest extends CGeoTestCase {
         final Geocache gc1zxez = CgeoApplicationTest.testSearchByGeocode("GC1ZXEZ");
         assertThat(gc1zxez).isNotNull();
         assertThat(gc1zxez.getOwnerUserId()).isEqualTo("Ms.Marple/Mr.Stringer");
+        assertThat(gc1zxez.getOwnerGuid()).isEqualTo("b66a625c-0266-43a7-9e7c-efecb9b2929a");
     }
 
     /** Remove cache from DB and cache to ensure that the cache is not loaded from the database */

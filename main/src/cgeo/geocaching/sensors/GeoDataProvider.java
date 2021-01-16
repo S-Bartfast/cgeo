@@ -13,9 +13,8 @@ import android.os.Bundle;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.ObservableEmitter;
 import org.apache.commons.lang3.StringUtils;
 
 public class GeoDataProvider {
@@ -27,36 +26,30 @@ public class GeoDataProvider {
     public static Observable<GeoData> create(final Context context) {
         final LocationManager geoManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
         final AtomicReference<Location> latestGPSLocation = new AtomicReference<>(null);
-        final Observable<GeoData> observable = Observable.create(new ObservableOnSubscribe<GeoData>() {
-            @Override
-            public void subscribe(final ObservableEmitter<GeoData> emitter) throws Exception {
-                final Listener networkListener = new Listener(emitter, latestGPSLocation);
-                final Listener gpsListener = new Listener(emitter, latestGPSLocation);
-                final GeoData initialLocation = GeoData.getInitialLocation(context);
-                if (initialLocation != null) {
-                    emitter.onNext(initialLocation);
-                }
-                Log.d("GeoDataProvider: starting the GPS and network listeners");
-                try {
-                    geoManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, gpsListener);
-                } catch (final Exception e) {
-                    Log.w("Unable to create GPS location provider: " + e.getMessage());
-                }
-                try {
-                    geoManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, networkListener);
-                } catch (final Exception e) {
-                    Log.w("Unable to create network location provider: " + e.getMessage());
-                }
-                emitter.setDisposable(AndroidRxUtils.disposeOnCallbacksScheduler(new Runnable() {
-                    @Override
-                    public void run() {
-                        geoManager.removeUpdates(networkListener);
-                        geoManager.removeUpdates(gpsListener);
-                    }
-                }));
+        final Observable<GeoData> observable = Observable.create(emitter -> {
+            final Listener networkListener = new Listener(emitter, latestGPSLocation);
+            final Listener gpsListener = new Listener(emitter, latestGPSLocation);
+            final GeoData initialLocation = GeoData.getInitialLocation(context);
+            if (initialLocation != null) {
+                emitter.onNext(initialLocation);
             }
+            Log.d("GeoDataProvider: starting the GPS and network listeners");
+            try {
+                geoManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, gpsListener);
+            } catch (final Exception e) {
+                Log.w("Unable to create GPS location provider: " + e.getMessage());
+            }
+            try {
+                geoManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, networkListener);
+            } catch (final Exception e) {
+                Log.w("Unable to create network location provider: " + e.getMessage());
+            }
+            emitter.setDisposable(AndroidRxUtils.disposeOnCallbacksScheduler(() -> {
+                geoManager.removeUpdates(networkListener);
+                geoManager.removeUpdates(gpsListener);
+            }));
         });
-        return observable.subscribeOn(AndroidRxUtils.looperCallbacksScheduler).share().lift(new RxUtils.DelayedUnsubscription<GeoData>(2500, TimeUnit.MILLISECONDS));
+        return observable.subscribeOn(AndroidRxUtils.looperCallbacksScheduler).share().lift(new RxUtils.DelayedUnsubscription<>(2500, TimeUnit.MILLISECONDS));
     }
 
     private static class Listener implements LocationListener {
@@ -75,7 +68,7 @@ public class GeoDataProvider {
                 latestGPSLocation.set(location);
                 assign(latestGPSLocation.get());
             } else {
-                assign(GeoData.best(latestGPSLocation.get(), location));
+                assign(GeoData.determineBestLocation(latestGPSLocation.get(), location));
             }
         }
 

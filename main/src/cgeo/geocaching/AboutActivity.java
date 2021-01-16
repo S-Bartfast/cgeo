@@ -1,10 +1,14 @@
 package cgeo.geocaching;
 
 import cgeo.geocaching.activity.AbstractViewPagerActivity;
+import cgeo.geocaching.maps.routing.Routing;
 import cgeo.geocaching.ui.AbstractCachingPageViewCreator;
 import cgeo.geocaching.ui.AnchorAwareLinkMovementMethod;
 import cgeo.geocaching.utils.ClipboardUtils;
+import cgeo.geocaching.utils.DebugUtils;
+import cgeo.geocaching.utils.LiUtils;
 import cgeo.geocaching.utils.ProcessUtils;
+import cgeo.geocaching.utils.ShareUtils;
 import cgeo.geocaching.utils.SystemInformation;
 import cgeo.geocaching.utils.Version;
 
@@ -12,16 +16,19 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.RawRes;
-import android.support.annotation.StringRes;
+import android.text.SpannableStringBuilder;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.RawRes;
+import androidx.annotation.StringRes;
+import androidx.core.text.HtmlCompat;
+
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
@@ -29,7 +36,6 @@ import java.util.Scanner;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.CharEncoding;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -57,7 +63,7 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
             Scanner scanner = null;
             try {
                 ins = res.openRawResource(resourceId);
-                scanner = new Scanner(ins, CharEncoding.UTF_8);
+                scanner = new Scanner(ins, StandardCharsets.UTF_8.name());
                 return scanner.useDelimiter("\\A").next();
             } finally {
                 IOUtils.closeQuietly(ins);
@@ -72,16 +78,78 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
 
     class ContributorsViewCreator extends AbstractCachingPageViewCreator<ScrollView> {
 
-        @BindView(R.id.contributors) protected TextView contributors;
+        @BindView(R.id.about_carnerodetails) protected TextView carnerodetails;
+        @BindView(R.id.about_contributors_recent) protected TextView contributors;
+        @BindView(R.id.about_specialthanksdetails) protected TextView specialthanks;
+        @BindView(R.id.about_contributors_others) protected TextView contributorsOthers;
+        @BindView(R.id.about_components) protected TextView components;
 
         @Override
         public ScrollView getDispatchedView(final ViewGroup parentView) {
             final ScrollView view = (ScrollView) getLayoutInflater().inflate(R.layout.about_contributors_page, parentView, false);
             ButterKnife.bind(this, view);
-            contributors.setMovementMethod(AnchorAwareLinkMovementMethod.getInstance());
+            setText(contributors, R.string.contributors_recent);
+            setText(contributorsOthers, R.string.contributors_other);
+
+            final AnchorAwareLinkMovementMethod mm = AnchorAwareLinkMovementMethod.getInstance();
+            carnerodetails.setMovementMethod(mm);
+            contributors.setMovementMethod(mm);
+            specialthanks.setMovementMethod(mm);
+            contributorsOthers.setMovementMethod(mm);
+            components.setMovementMethod(mm);
+
             return view;
         }
 
+        private String checkRoles(final String s, final String roles, final char checkFor, final int infoId) {
+            return roles.indexOf(checkFor) >= 0 ? (s.isEmpty() ? "" : s + ", ") + getString(infoId) : s;
+        }
+
+        private void setText(final TextView t, final int resId) {
+            String s = getString(resId);
+            final SpannableStringBuilder sb = new SpannableStringBuilder("<ul>");
+            int p1 = 0;
+            int p2 = 0;
+            int p3 = 0;
+            String name;
+            String link;
+            String roles;
+
+            p1 = s.indexOf("|");
+            if (p1 >= 0) {
+                do {
+                    name = s.substring(0, p1).trim();
+                    p2 = s.indexOf("|", p1 + 1);
+                    if (p2 < 0) {
+                        break;
+                    }
+                    link = s.substring(p1 + 1, p2).trim();
+                    p3 = s.indexOf("|", p2 + 1);
+                    if (p3 < 0) {
+                        break;
+                    }
+                    final String temp = s.substring(p2 + 1, p3);
+                    roles = checkRoles(checkRoles(checkRoles(checkRoles(checkRoles(checkRoles("",
+                        temp, 'c', R.string.contribution_code),
+                        temp, 'd', R.string.contribution_documentation),
+                        temp, 'g', R.string.contribution_graphics),
+                        temp, 'p', R.string.contribution_projectleader),
+                        temp, 's', R.string.contribution_support),
+                        temp, 't', R.string.contribution_tester);
+
+                    sb.append("· ")
+                        .append(link.isEmpty() ? name : "<a href=\"" + link + "\">" + name + "</a>")
+                        .append(roles.isEmpty() ? "" : " (" + roles + ")")
+                        .append("<br />");
+
+                    s = s.substring(p3 + 1);
+                    p1 = s.indexOf("|");
+                } while (p1 > 0);
+            }
+            sb.append("</ul>");
+
+            t.setText(HtmlCompat.fromHtml(sb.toString(), HtmlCompat.FROM_HTML_MODE_LEGACY));
+        }
     }
 
     class ChangeLogViewCreator extends AbstractCachingPageViewCreator<ScrollView> {
@@ -101,13 +169,11 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
             } else {
                 changeLogMaster.setMovementMethod(AnchorAwareLinkMovementMethod.getInstance());
             }
-            changeLogLink.setOnClickListener(new OnClickListener() {
+            changeLogLink.setOnClickListener(v -> startUrl("https://github.com/cgeo/cgeo/releases"));
 
-                @Override
-                public void onClick(final View v) {
-                    startUrl("https://github.com/cgeo/cgeo/releases");
-                }
-            });
+            changeLogMaster.setText(LiUtils.formatHTML(getString(R.string.changelog_master)));
+            changeLogRelease.setText(LiUtils.formatHTML(getString(R.string.changelog_release)));
+
             return view;
         }
 
@@ -118,6 +184,7 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
         @BindView(R.id.system) protected TextView system;
         @BindView(R.id.copy) protected Button copy;
         @BindView(R.id.share) protected Button share;
+        @BindView(R.id.logcat) protected Button logcat;
 
         @Override
         public ScrollView getDispatchedView(final ViewGroup parentView) {
@@ -127,55 +194,12 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
             system.setText(systemInfo);
             system.setMovementMethod(AnchorAwareLinkMovementMethod.getInstance());
             system.setTextIsSelectable(true);
-            copy.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(final View view) {
-                    ClipboardUtils.copyToClipboard(systemInfo);
-                    showShortToast(getString(R.string.clipboard_copy_ok));
-                }
+            copy.setOnClickListener(view1 -> {
+                ClipboardUtils.copyToClipboard(systemInfo);
+                showShortToast(getString(R.string.clipboard_copy_ok));
             });
-            share.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(final View view) {
-                    ClipboardUtils.copyToClipboard(systemInfo);
-                    final Intent share = new Intent(Intent.ACTION_SENDTO);
-                    share.setType("message/rfc822");
-                    share.setData(Uri.parse("mailto:"));
-                    share.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.about_system_info));
-                    share.putExtra(Intent.EXTRA_TEXT, systemInfo);
-                    startActivity(Intent.createChooser(share, getString(R.string.about_system_info_send_chooser)));
-                }
-            });
-            return view;
-        }
-    }
-
-    class HelpViewCreator extends AbstractCachingPageViewCreator<ScrollView> {
-
-        @BindView(R.id.support) protected TextView support;
-        @BindView(R.id.website) protected TextView website;
-        @BindView(R.id.facebook) protected TextView facebook;
-        @BindView(R.id.twitter) protected TextView twitter;
-        @BindView(R.id.market) protected TextView market;
-        @BindView(R.id.faq) protected TextView faq;
-
-        @Override
-        public ScrollView getDispatchedView(final ViewGroup parentView) {
-            final ScrollView view = (ScrollView) getLayoutInflater().inflate(R.layout.about_help_page, parentView, false);
-            ButterKnife.bind(this, view);
-            setClickListener(support, "mailto:support@cgeo.org?subject=" + Uri.encode("cgeo " + Version.getVersionName(AboutActivity.this)) +
-                    "&body=" + Uri.encode(SystemInformation.getSystemInformation(AboutActivity.this)) + "\n");
-            setClickListener(website, "http://www.cgeo.org/");
-            setClickListener(facebook, "https://www.facebook.com/pages/cgeo/297269860090");
-            setClickListener(twitter, "https://twitter.com/android_gc");
-            setClickListener(faq, "http://faq.cgeo.org/");
-            market.setOnClickListener(new View.OnClickListener() {
-
-                @Override
-                public void onClick(final View v) {
-                    ProcessUtils.openMarket(AboutActivity.this, getPackageName());
-                }
-            });
+            share.setOnClickListener(view12 -> ShareUtils.shareAsEmail(AboutActivity.this, getString(R.string.about_system_info), systemInfo, null, R.string.about_system_info_send_chooser));
+            logcat.setOnClickListener(view13 -> DebugUtils.createLogcat(AboutActivity.this));
             return view;
         }
 
@@ -187,23 +211,41 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
         @BindView(R.id.about_special_build) protected TextView specialBuild;
         @BindView(R.id.donate) protected TextView donateButton;
 
+        @BindView(R.id.support) protected TextView support;
+        @BindView(R.id.website) protected TextView website;
+        @BindView(R.id.facebook) protected TextView facebook;
+        @BindView(R.id.twitter) protected TextView twitter;
+        @BindView(R.id.nutshellmanual) protected TextView nutshellmanual;
+        @BindView(R.id.market) protected TextView market;
+        @BindView(R.id.faq) protected TextView faq;
+        @BindView(R.id.github) protected TextView github;
+
         @Override
         public ScrollView getDispatchedView(final ViewGroup parentView) {
             final ScrollView view = (ScrollView) getLayoutInflater().inflate(R.layout.about_version_page, parentView, false);
             ButterKnife.bind(this, view);
             version.setText(Version.getVersionName(AboutActivity.this));
-            setClickListener(donateButton, "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=AQBS7UP76CXW2");
+            setClickListener(donateButton, "https://www.cgeo.org");
             if (StringUtils.isNotEmpty(BuildConfig.SPECIAL_BUILD)) {
                 specialBuild.setText(BuildConfig.SPECIAL_BUILD);
                 specialBuild.setVisibility(View.VISIBLE);
             }
+
+            setClickListener(support, "mailto:support@cgeo.org?subject=" + Uri.encode("cgeo " + Version.getVersionName(AboutActivity.this)) +
+                    "&body=" + Uri.encode(SystemInformation.getSystemInformation(AboutActivity.this)) + "\n");
+            setClickListener(website, "https://www.cgeo.org/");
+            setClickListener(facebook, "https://www.facebook.com/pages/cgeo/297269860090");
+            setClickListener(twitter, "https://twitter.com/android_gc");
+            setClickListener(nutshellmanual, "https://manual.cgeo.org/");
+            setClickListener(faq, "https://faq.cgeo.org/");
+            setClickListener(github, "https://github.com/cgeo/cgeo/issues");
+            market.setOnClickListener(v -> ProcessUtils.openMarket(AboutActivity.this, getPackageName()));
             return view;
         }
     }
 
     enum Page {
         VERSION(R.string.about_version),
-        HELP(R.string.about_help),
         CHANGELOG(R.string.about_changelog),
         SYSTEM(R.string.about_system),
         CONTRIBUTORS(R.string.about_contributors),
@@ -221,23 +263,25 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
     public void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState, R.layout.viewpager_activity);
 
+        Routing.connect();
+
         int startPage = Page.VERSION.ordinal();
         final Bundle extras = getIntent().getExtras();
         if (extras != null) {
             startPage = extras.getInt(EXTRA_ABOUT_STARTPAGE, startPage);
         }
-        createViewPager(startPage, null);
+        createViewPager(startPage, position -> setTitle(res.getString(R.string.about) + " - " + getTitle(Page.values()[position])));
         reinitializeViewPager();
     }
 
-    public final void setClickListener(final View view, final String url) {
-        view.setOnClickListener(new View.OnClickListener() {
+    @Override
+    protected void onDestroy() {
+        Routing.disconnect();
+        super.onDestroy();
+    }
 
-            @Override
-            public void onClick(final View v) {
-                startUrl(url);
-            }
-        });
+    public final void setClickListener(final View view, final String url) {
+        view.setOnClickListener(v -> startUrl(url));
     }
 
     private void startUrl(final String url) {
@@ -249,8 +293,6 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
         switch (page) {
             case VERSION:
                 return new VersionViewCreator();
-            case HELP:
-                return new HelpViewCreator();
             case CHANGELOG:
                 return new ChangeLogViewCreator();
             case SYSTEM:
@@ -265,13 +307,16 @@ public class AboutActivity extends AbstractViewPagerActivity<AboutActivity.Page>
 
     @Override
     protected final String getTitle(final Page page) {
+        if (page == Page.VERSION) {
+            return res.getString(R.string.about_version) + " / " + res.getString(R.string.about_help);
+        }
         return res.getString(page.resourceId);
     }
 
     @Override
     protected final Pair<List<? extends Page>, Integer> getOrderedPages() {
         final List<Page> pages = Arrays.asList(Page.values());
-        return new ImmutablePair<List<? extends Page>, Integer>(pages, 0);
+        return new ImmutablePair<>(pages, 0);
     }
 
     public static void showChangeLog(final Activity fromActivity) {

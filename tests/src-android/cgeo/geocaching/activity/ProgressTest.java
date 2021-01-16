@@ -1,11 +1,13 @@
 package cgeo.geocaching.activity;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.AboutActivity;
 
 import android.annotation.TargetApi;
 import android.test.ActivityInstrumentationTestCase2;
+
+import androidx.test.filters.Suppress;
+
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 /**
  * This test uses the about activity to avoid side effects like network and GPS being triggered by the main activity.
@@ -17,6 +19,10 @@ public class ProgressTest extends ActivityInstrumentationTestCase2<AboutActivity
         super(AboutActivity.class);
     }
 
+    // very fishy test. Produces regular problems in CI and also locally when executed solely:
+    // 'java.lang.RuntimeException: Can't create handler inside thread Thread[Instr: androidx.test.runner.AndroidJUnitRunner,5,main] that has not called Looper.prepare()'
+    // see Issue #8764
+    @Suppress
     public void testProgressWrapper() {
         final Progress progress = new Progress();
 

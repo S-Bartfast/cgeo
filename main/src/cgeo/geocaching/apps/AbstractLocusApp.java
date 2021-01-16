@@ -1,6 +1,8 @@
 package cgeo.geocaching.apps;
 
 import cgeo.geocaching.CgeoApplication;
+import cgeo.geocaching.R;
+import cgeo.geocaching.activity.ActivityMixin;
 import cgeo.geocaching.enumerations.CacheSize;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.enumerations.WaypointType;
@@ -8,10 +10,15 @@ import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.utils.Log;
 
+import android.Manifest;
 import android.content.Context;
-import android.os.Environment;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,37 +26,46 @@ import java.util.Date;
 import java.util.List;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import locus.api.android.ActionDisplay;
 import locus.api.android.ActionDisplayPoints;
-import locus.api.android.objects.PackWaypoints;
+import locus.api.android.ActionDisplayVarious;
+import locus.api.android.objects.LocusVersion;
+import locus.api.android.objects.PackPoints;
+import locus.api.android.objects.VersionCode;
 import locus.api.android.utils.LocusUtils;
 import locus.api.android.utils.exceptions.RequiredVersionMissingException;
 import locus.api.objects.extra.Location;
-import locus.api.objects.extra.Waypoint;
+import locus.api.objects.geoData.Point;
 import locus.api.objects.geocaching.GeocachingData;
 import locus.api.objects.geocaching.GeocachingWaypoint;
+import org.apache.commons.collections4.CollectionUtils;
 
 /**
  * for the Locus API:
  *
- * @see <a href="http://docs.locusmap.eu/doku.php?id=manual:advanced:locus_api:installation">Locus API</a>
- * @see <a href="https://bitbucket.org/asamm/locus-api-android-sample/src/1fad202e6166239b6e424f03bac79f0000f8eb6d/src/main/java/menion/android/locus/api/utils/SampleCalls.java?at=default&fileviewer=file-view-default">Sample Calls</a>
+ * @see <a href="https://docs.locusmap.eu/doku.php?id=manual:advanced:locus_api:installation">Locus API</a>
+ * @see <a href="https://github.com/asamm/locus-api/blob/master/locus-api-android-sample/src/main/java/com/asamm/locus/api/sample/utils/SampleCalls.kt">Sample Calls</a>
  */
 public abstract class AbstractLocusApp extends AbstractApp {
+
+    private static final int NO_LOCUS_ID = -1;
+    /**
+     * Locus Version
+     */
+    private final LocusVersion lv;
 
     @SuppressFBWarnings("NP_METHOD_PARAMETER_TIGHTENS_ANNOTATION")
     protected AbstractLocusApp(@NonNull final String text, @NonNull final String intent) {
         super(text, intent);
+
+        lv = LocusUtils.INSTANCE.getActiveVersion(CgeoApplication.getInstance());
+        if (lv == null) { // locus not installed
+            Log.w("Couldn't get active Locus version");
+        }
     }
 
     @Override
     public boolean isInstalled() {
-        try {
-            return LocusUtils.getActiveVersion(CgeoApplication.getInstance()) != null;
-        } catch (final Exception ignored) {
-            Log.w("Couldn't get active Locus version", ignored);
-        }
-        return false;
+        return lv != null;
     }
 
     /**
@@ -60,16 +76,20 @@ public abstract class AbstractLocusApp extends AbstractApp {
      * @param withCacheWaypoints
      *            Whether to give waypoints of caches to Locus or not
      */
-    protected static boolean showInLocus(final List<?> objectsToShow, final boolean withCacheWaypoints, final boolean export,
-            final Context context) {
-        if (objectsToShow == null || objectsToShow.isEmpty()) {
-            return false;
+    protected void showInLocus(final List<?> objectsToShow, final boolean withCacheWaypoints, final boolean export,
+                               final Context context) {
+        if (CollectionUtils.isEmpty(objectsToShow)) {
+            return;
+        }
+
+        if (!isInstalled()) {
+            return;
         }
 
         final boolean withCacheDetails = objectsToShow.size() < 200;
-        final PackWaypoints pd = new PackWaypoints("c:geo");
+        final PackPoints pd = new PackPoints("c:geo");
         for (final Object o : objectsToShow) {
-            Waypoint p = null;
+            Point p = null;
             // get icon and Point
             if (o instanceof Geocache) {
                 p = getCachePoint((Geocache) o, withCacheWaypoints, withCacheDetails);
@@ -77,46 +97,44 @@ public abstract class AbstractLocusApp extends AbstractApp {
                 p = getWaypointPoint((cgeo.geocaching.models.Waypoint) o);
             }
             if (p != null) {
-                pd.addWaypoint(p);
+                pd.addPoint(p);
             }
         }
 
-        if (pd.getWaypoints().isEmpty()) {
-            return false;
+        if (pd.getPoints().length == 0) {
+            return;
         }
 
-        if (pd.getWaypoints().size() <= 1000) {
+        if (pd.getPoints().length <= 1000) {
             try {
-                ActionDisplayPoints.sendPack(context, pd, export ? ActionDisplay.ExtraAction.IMPORT : ActionDisplay.ExtraAction.CENTER);
+                ActionDisplayPoints.INSTANCE.sendPack(context, pd, export ? ActionDisplayVarious.ExtraAction.IMPORT : ActionDisplayVarious.ExtraAction.CENTER);
             } catch (final RequiredVersionMissingException e) {
                 Log.e("AbstractLocusApp.showInLocus: problem in sendPack", e);
-                return false;
             }
         } else {
-            final File externalDir = Environment.getExternalStorageDirectory();
-            if (externalDir == null || !externalDir.exists()) {
-                Log.w("AbstractLocusApp.showInLocus: problem with obtain of External dir");
-                return false;
-            }
+            final File externalDir = new File(context.getExternalFilesDir(null), "showIn.locus");
+            final File file = new File(externalDir.toURI());
 
-            String filePath = externalDir.getAbsolutePath();
-            if (!filePath.endsWith("/")) {
-                filePath += "/";
-            }
-            filePath += "Android/data/menion.android.locus.api/files/showIn.locus";
-
-            final ArrayList<PackWaypoints> data = new ArrayList<>();
+            final ArrayList<PackPoints> data = new ArrayList<>();
             data.add(pd);
 
             try {
-                ActionDisplayPoints.sendPacksFile(context, data, filePath, export ? ActionDisplay.ExtraAction.IMPORT : ActionDisplay.ExtraAction.CENTER);
+                if (lv.isVersionValid(VersionCode.UPDATE_15)) {
+                    // send file via FileProvider, you don't need WRITE_EXTERNAL_STORAGE permission for this
+                    final Uri uri = FileProvider.getUriForFile(context, context.getString(R.string.file_provider_authority), file);
+                    ActionDisplayPoints.INSTANCE.sendPacksFile(context, lv, data, file, uri, export ? ActionDisplayVarious.ExtraAction.IMPORT : ActionDisplayVarious.ExtraAction.CENTER);
+                } else {
+                    // send file old way, you need WRITE_EXTERNAL_STORAGE permission for this
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                        ActionDisplayPoints.INSTANCE.sendPacksFile(context, lv, data, file, null, ActionDisplayVarious.ExtraAction.CENTER);
+                    } else {
+                        ActivityMixin.showToast(context, getString(R.string.storage_permission_needed));
+                    }
+                }
             } catch (final RequiredVersionMissingException e) {
                 Log.e("AbstractLocusApp.showInLocus: problem in sendPacksFile", e);
-                return false;
             }
         }
-
-        return true;
     }
 
     /**
@@ -130,17 +148,18 @@ public abstract class AbstractLocusApp extends AbstractApp {
      * @return null, when the {@code Point} could not be constructed
      */
     @Nullable
-    private static Waypoint getCachePoint(final Geocache cache, final boolean withWaypoints, final boolean withCacheDetails) {
+    private static Point getCachePoint(final Geocache cache, final boolean withWaypoints, final boolean withCacheDetails) {
         if (cache == null || cache.getCoords() == null) {
             return null;
         }
 
         // create one simple point with location
-        final Location loc = new Location("cgeo");
+        final Location loc = new Location();
+        loc.setProvider("cgeo");
         loc.setLatitude(cache.getCoords().getLatitude());
         loc.setLongitude(cache.getCoords().getLongitude());
 
-        final Waypoint wpt = new Waypoint(cache.getName(), loc);
+        final Point wpt = new Point(cache.getName(), loc);
         // generate new data
         final GeocachingData gcData = new GeocachingData();
 
@@ -198,7 +217,7 @@ public abstract class AbstractLocusApp extends AbstractApp {
                     gcWpt.setLat(waypointCoords.getLatitude());
                 }
 
-                gcData.waypoints.add(gcWpt);
+                gcData.getWaypoints().add(gcWpt);
             }
         }
 
@@ -213,7 +232,7 @@ public abstract class AbstractLocusApp extends AbstractApp {
         }
 
         // set data and return point
-        wpt.gcData = gcData;
+        wpt.setGcData(gcData);
         return wpt;
     }
 
@@ -223,7 +242,7 @@ public abstract class AbstractLocusApp extends AbstractApp {
      * @return null, when the {@code Point} could not be constructed
      */
     @Nullable
-    private static Waypoint getWaypointPoint(final cgeo.geocaching.models.Waypoint waypoint) {
+    private static Point getWaypointPoint(final cgeo.geocaching.models.Waypoint waypoint) {
         if (waypoint == null) {
             return null;
         }
@@ -233,19 +252,23 @@ public abstract class AbstractLocusApp extends AbstractApp {
         }
 
         // create one simple point with location
-        final Location loc = new Location("cgeo");
+        final Location loc = new Location();
+        loc.setProvider("cgeo");
         loc.setLatitude(coordinates.getLatitude());
         loc.setLongitude(coordinates.getLongitude());
 
-        final Waypoint p = new Waypoint(waypoint.getName(), loc);
-        //TODO: not supported by new Locus API (or I haven't found it yet, pstorch)
-        //p.setDescription("<a href=\"" + waypoint.getUrl() + "\">" + waypoint.getGeocode() + "</a>");
+        final Point p = new Point(waypoint.getName(), loc);
+        p.setParameterDescription(
+                "Name: " + waypoint.getName() +
+                        "<br />Note: " + waypoint.getNote() +
+                        "<br />UserNote: " + waypoint.getUserNote() +
+                        "<br /><br /> <a href=\"" + waypoint.getUrl() + "\">" + waypoint.getGeocode() + "</a>"
+        );
 
         return p;
     }
 
-    private static final int NO_LOCUS_ID = -1;
-
+    // https://github.com/asamm/locus-api/blob/master/locus-api-core/src/main/java/locus/api/objects/geocaching/GeocachingData.kt
     private static int toLocusType(final CacheType ct) {
         switch (ct) {
             case TRADITIONAL:
@@ -272,12 +295,32 @@ public abstract class AbstractLocusApp extends AbstractApp {
                 return GeocachingData.CACHE_TYPE_VIRTUAL;
             case WHERIGO:
                 return GeocachingData.CACHE_TYPE_WHERIGO;
-            case LOSTANDFOUND:
-                return GeocachingData.CACHE_TYPE_LF_EVENT;
+            case COMMUN_CELEBRATION:
+                return GeocachingData.CACHE_TYPE_COMMUNITY_CELEBRATION;
             case PROJECT_APE:
                 return GeocachingData.CACHE_TYPE_PROJECT_APE;
+            case GCHQ:
+                return GeocachingData.CACHE_TYPE_GC_HQ;
+            case GCHQ_CELEBRATION:
+                return GeocachingData.CACHE_TYPE_GC_HQ_CELEBRATION;
             case GPS_EXHIBIT:
                 return GeocachingData.CACHE_TYPE_GPS_ADVENTURE;
+            case BLOCK_PARTY:
+                return GeocachingData.CACHE_TYPE_GC_HQ_BLOCK_PARTY;
+            case LOCATIONLESS:
+                return GeocachingData.CACHE_TYPE_LOCATIONLESS;
+// Benchmark, not published over API from Locus (state: locus-api-android:0.9.21)
+//            case BENCHMARK:
+//                return GeocachingData.CACHE_TYPE_BENCHMARK;
+// Maze Exhibit, not published over API from Locus (state: locus-api-android:0.9.21)
+//            case MAZE_EXHIBIT:
+//                return GeocachingData.CACHE_TYPE_MAZE_EXHIBIT;
+// Waymark, not published over API from Locus (state: locus-api-android:0.9.21)
+//            case WAYMARK:
+//                return GeocachingData.CACHE_TYPE_WAYMARK;
+// Lab cache, not published over API from Locus (state: locus-api-android:0.9.21)
+//            case LAB_CACHE:
+//                return GeocachingData.CACHE_TYPE_LAB_CACHE;
             default:
                 return NO_LOCUS_ID;
         }
@@ -285,6 +328,8 @@ public abstract class AbstractLocusApp extends AbstractApp {
 
     private static int toLocusSize(final CacheSize cs) {
         switch (cs) {
+            case NANO:
+                return GeocachingData.CACHE_SIZE_MICRO; // used by OC only
             case MICRO:
                 return GeocachingData.CACHE_SIZE_MICRO;
             case SMALL:
@@ -293,6 +338,8 @@ public abstract class AbstractLocusApp extends AbstractApp {
                 return GeocachingData.CACHE_SIZE_REGULAR;
             case LARGE:
                 return GeocachingData.CACHE_SIZE_LARGE;
+            case VERY_LARGE:
+                return GeocachingData.CACHE_SIZE_HUGE; // used by OC only
             case NOT_CHOSEN:
                 return GeocachingData.CACHE_SIZE_NOT_CHOSEN;
             case OTHER:

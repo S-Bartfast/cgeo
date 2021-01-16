@@ -46,7 +46,8 @@
 
         <ImageView
             android:id="@+id/image_preview"
-            android:layout_width="wrap_content"
+            android:scaleType="centerInside"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="5dip"
             android:layout_marginTop="5dip"
@@ -60,6 +61,7 @@
             style="@style/edittext_full"
             android:layout_height="wrap_content"
             android:hint="@string/log_image_caption"
+            android:autofillHints="@string/log_image_caption"
             android:inputType="textCapSentences"
             android:maxLength="50"
             android:minLines="1" />
@@ -69,6 +71,7 @@
             style="@style/edittext_full"
             android:layout_height="wrap_content"
             android:hint="@string/log_image_description"
+            android:autofillHints="@string/log_image_description"
             android:inputType="textMultiLine|textCapSentences"
             android:maxLength="250"
             android:minLines="5" />
@@ -77,7 +80,6 @@
             android:id="@+id/logImageScale"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:entries="@array/log_image_scales"
             android:prompt="@string/log_image_scale"
             tools:listitem="@android:layout/simple_spinner_item" />
 
@@ -99,6 +101,13 @@
                 android:layout_width="0dip"
                 android:layout_weight="1"
                 android:text="@android:string/ok" />
+
+            <Button
+                android:id="@+id/delete"
+                style="@style/button_full"
+                android:layout_width="0dip"
+                android:layout_weight="1"
+                android:text="@string/log_image_delete" />
         </LinearLayout>
     </LinearLayout>
 

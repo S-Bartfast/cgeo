@@ -1,7 +1,5 @@
 package cgeo.geocaching.connector.trackable;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.log.LogEntry;
 import cgeo.geocaching.log.LogType;
@@ -20,6 +18,7 @@ import java.util.TimeZone;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.xml.sax.InputSource;
+import static org.assertj.core.api.Java6Assertions.assertThat;
 
 public class GeokretyParserTest extends AbstractResourceInstrumentationTestCase {
 
@@ -278,7 +277,7 @@ public class GeokretyParserTest extends AbstractResourceInstrumentationTestCase 
                 .build();
 
         final String userUnknown = CgeoApplication.getInstance().getString(cgeo.geocaching.R.string.user_unknown);
-        assertThat(GeokretyParser.getLastSpottedUsername(new ArrayList<LogEntry>())).isEqualTo(userUnknown);
+        assertThat(GeokretyParser.getLastSpottedUsername(new ArrayList<>())).isEqualTo(userUnknown);
 
         final List<LogEntry> logsEntries1 = new ArrayList<>();
         logsEntries1.add(note);

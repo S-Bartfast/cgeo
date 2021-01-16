@@ -2,13 +2,11 @@ package cgeo.geocaching.loaders;
 
 import cgeo.geocaching.SearchResult;
 import cgeo.geocaching.connector.ConnectorFactory;
-import cgeo.geocaching.connector.capability.ISearchByCenter;
 import cgeo.geocaching.location.Geopoint;
 
 import android.app.Activity;
-import android.support.annotation.NonNull;
 
-import io.reactivex.functions.Function;
+import androidx.annotation.NonNull;
 
 public class CoordsGeocacheListLoader extends AbstractSearchLoader {
     @NonNull private final Geopoint coords;
@@ -21,12 +19,7 @@ public class CoordsGeocacheListLoader extends AbstractSearchLoader {
     @Override
     public SearchResult runSearch() {
         return nonEmptyCombineActive(ConnectorFactory.getSearchByCenterConnectors(),
-                new Function<ISearchByCenter, SearchResult>() {
-                    @Override
-                    public SearchResult apply(final ISearchByCenter connector) {
-                        return connector.searchByCenter(coords);
-                    }
-                });
+                connector -> connector.searchByCenter(coords));
     }
 
 }

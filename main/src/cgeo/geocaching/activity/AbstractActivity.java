@@ -4,45 +4,54 @@ import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.Intents;
 import cgeo.geocaching.R;
 import cgeo.geocaching.compatibility.Compatibility;
+import cgeo.geocaching.enumerations.CacheListType;
 import cgeo.geocaching.enumerations.CacheType;
 import cgeo.geocaching.enumerations.LoadFlags;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.network.AndroidBeam;
 import cgeo.geocaching.storage.DataStore;
+import cgeo.geocaching.utils.ApplicationSettings;
 import cgeo.geocaching.utils.ClipboardUtils;
 import cgeo.geocaching.utils.EditUtils;
 import cgeo.geocaching.utils.HtmlUtils;
 import cgeo.geocaching.utils.Log;
+import cgeo.geocaching.utils.MapMarkerUtils;
+import cgeo.geocaching.utils.ShareUtils;
 import cgeo.geocaching.utils.TextUtils;
 import cgeo.geocaching.utils.TranslationUtils;
 
 import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Bundle;
-import android.support.annotation.LayoutRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.content.LocalBroadcastManager;
-import android.support.v7.app.ActionBarActivity;
-import android.support.v7.view.ActionMode;
+import android.util.AndroidRuntimeException;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
 import android.widget.EditText;
 
+import androidx.annotation.LayoutRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ActionMode;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
 import java.util.Locale;
 
 import butterknife.ButterKnife;
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import org.apache.commons.lang3.StringUtils;
 
-public abstract class AbstractActivity extends ActionBarActivity implements IAbstractActivity {
+public abstract class AbstractActivity extends AppCompatActivity implements IAbstractActivity {
 
     protected CgeoApplication app = null;
     protected Resources res = null;
     private boolean keepScreenOn = false;
     private final CompositeDisposable resumeDisposable = new CompositeDisposable();
+
+    private final String logToken = "[" + this.getClass().getName() + "]";
 
     protected AbstractActivity() {
         this(false);
@@ -53,7 +62,11 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
     }
 
     protected final void showProgress(final boolean show) {
-        ActivityMixin.showProgress(this, show);
+        try {
+            ActivityMixin.showProgress(this, show);
+        } catch (final Exception ex) {
+            Log.e(String.format(Locale.US, "Error seeting progress: %b", show), ex);
+        }
     }
 
     protected final void setTheme() {
@@ -65,26 +78,35 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
         ActivityMixin.showToast(this, text);
     }
 
+    public final void showToast(final int textId) {
+        showToast(getString(textId));
+    }
+
     @Override
     public final void showShortToast(final String text) {
         ActivityMixin.showShortToast(this, text);
     }
 
+    public final void showShortToast(final int textId) {
+        showShortToast(getString(textId));
+    }
+
     @Override
     public boolean onOptionsItemSelected(final MenuItem item) {
+        Log.v(logToken + ".onOptionsItemSelected(" + item.getItemId() + "/" + item.getTitle() + ")");
         if (item.getItemId() == android.R.id.home) {
             return ActivityMixin.navigateUp(this);
         }
         return super.onOptionsItemSelected(item);
     }
 
-    public void onResume(final Disposable... resumeDisposable) {
-        super.onResume();
+    protected void resumeDisposables(final Disposable... resumeDisposable) {
         this.resumeDisposable.addAll(resumeDisposable);
     }
 
     @Override
     public void onPause() {
+        Log.v(logToken + ".onPause");
         resumeDisposable.clear();
         super.onPause();
     }
@@ -104,16 +126,20 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
 
     @Override
     public void invalidateOptionsMenuCompatible() {
+        Log.v(logToken + ".invalidateOptionsMenuCompatible");
         ActivityMixin.invalidateOptionsMenu(this);
     }
 
     @Override
     public void onCreate(final Bundle savedInstanceState) {
+        Log.v(logToken + ".onCreate(Bundle)");
+        ApplicationSettings.setLocale(this);
         super.onCreate(savedInstanceState);
         onCreateCommon();
     }
 
     protected void onCreate(final Bundle savedInstanceState, @LayoutRes final int resourceLayoutID) {
+        Log.v(logToken + ".onCreate(Bundle, resourceLayoutId=" + resourceLayoutID + ")");
         super.onCreate(savedInstanceState);
         onCreateCommon();
 
@@ -130,7 +156,11 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
      * Common actions for all onCreate functions.
      */
     private void onCreateCommon() {
-        supportRequestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
+        try {
+            supportRequestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
+        } catch (final AndroidRuntimeException ex) {
+            Log.e("Error requesting indeterminate progress", ex);
+        }
         AndroidBeam.disable(this);
         initializeCommonFields();
     }
@@ -146,6 +176,7 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
 
     @Override
     public void setContentView(@LayoutRes final int layoutResID) {
+        Log.v(logToken + ".setContentView(" + layoutResID + ")");
         super.setContentView(layoutResID);
 
         // initialize the action bar title with the activity title for single source
@@ -167,44 +198,37 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
     }
 
     protected boolean onClipboardItemSelected(@NonNull final ActionMode actionMode, final MenuItem item, final CharSequence clickedItemText, @Nullable final Geocache cache) {
+        Log.v(logToken + ".onClipboardItemSelected: " + clickedItemText);
         if (clickedItemText == null) {
             return false;
         }
-        switch (item.getItemId()) {
-            // detail fields
-            case R.id.menu_copy:
-                ClipboardUtils.copyToClipboard(clickedItemText);
-                showToast(res.getString(R.string.clipboard_copy_ok));
-                actionMode.finish();
-                return true;
-            case R.id.menu_translate_to_sys_lang:
-                TranslationUtils.startActivityTranslate(this, Locale.getDefault().getLanguage(), HtmlUtils.extractText(clickedItemText));
-                actionMode.finish();
-                return true;
-            case R.id.menu_translate_to_english:
-                TranslationUtils.startActivityTranslate(this, Locale.ENGLISH.getLanguage(), HtmlUtils.extractText(clickedItemText));
-                actionMode.finish();
-                return true;
-            case R.id.menu_extract_waypoints:
-                extractWaypoints(clickedItemText, cache);
-                actionMode.finish();
-                return true;
-            case R.id.menu_cache_share_field:
-                final Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_TEXT, clickedItemText.toString());
-                startActivity(Intent.createChooser(intent, res.getText(R.string.cache_share_field)));
-                actionMode.finish();
-                return true;
-            default:
-                return false;
+        final int itemId = item.getItemId();
+        if (itemId == R.id.menu_copy) {
+            ClipboardUtils.copyToClipboard(clickedItemText);
+            showToast(res.getString(R.string.clipboard_copy_ok));
+            actionMode.finish();
+        } else if (itemId == R.id.menu_translate_to_sys_lang) {
+            TranslationUtils.startActivityTranslate(this, Locale.getDefault().getLanguage(), HtmlUtils.extractText(clickedItemText));
+            actionMode.finish();
+        } else if (itemId == R.id.menu_translate_to_english) {
+            TranslationUtils.startActivityTranslate(this, Locale.ENGLISH.getLanguage(), HtmlUtils.extractText(clickedItemText));
+            actionMode.finish();
+        } else if (itemId == R.id.menu_extract_waypoints) {
+            extractWaypoints(clickedItemText, cache);
+            actionMode.finish();
+        } else if (itemId == R.id.menu_cache_share_field) {
+            ShareUtils.sharePlainText(this, clickedItemText.toString());
+            actionMode.finish();
+        } else {
+            return false;
         }
+        return true;
     }
 
     protected void extractWaypoints(@Nullable final CharSequence text, @Nullable final Geocache cache) {
         if (cache != null) {
             final int previousNumberOfWaypoints = cache.getWaypoints().size();
-            final boolean success = cache.addWaypointsFromText(HtmlUtils.extractText(text), true, res.getString(R.string.cache_description));
+            final boolean success = cache.addWaypointsFromText(HtmlUtils.extractText(text), true, res.getString(R.string.cache_description), true);
             final int waypointsAdded = cache.getWaypoints().size() - previousNumberOfWaypoints;
             showToast(res.getQuantityString(R.plurals.extract_waypoints_result, waypointsAdded, waypointsAdded));
             if (success) {
@@ -230,10 +254,14 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
 
     private void setCacheTitleBar(@NonNull final CharSequence title, @Nullable final CacheType type) {
         setTitle(title);
-        if (type != null) {
-            getSupportActionBar().setIcon(Compatibility.getDrawable(getResources(), type.markerId));
-        } else {
-            getSupportActionBar().setIcon(android.R.color.transparent);
+        final ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            if (type != null) {
+                actionBar.setDisplayShowHomeEnabled(true);
+                actionBar.setIcon(Compatibility.getDrawable(getResources(), type.markerId));
+            } else {
+                actionBar.setIcon(android.R.color.transparent);
+            }
         }
     }
 
@@ -241,7 +269,12 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
      * change the titlebar icon and text to show the current geocache
      */
     protected void setCacheTitleBar(@NonNull final Geocache cache) {
-        setCacheTitleBar(TextUtils.coloredCacheText(cache, cache.getName() + " (" + cache.getGeocode() + ")"), cache.getType());
+        setTitle(TextUtils.coloredCacheText(cache, cache.getName() + " (" + cache.getGeocode() + ")"));
+        final ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setDisplayShowHomeEnabled(true);
+            actionBar.setIcon(MapMarkerUtils.getCacheMarker(getResources(), cache, CacheListType.OFFLINE).getDrawable());
+        }
     }
 
     /**
@@ -257,5 +290,35 @@ public abstract class AbstractActivity extends ActionBarActivity implements IAbs
             return;
         }
         setCacheTitleBar(cache);
+    }
+
+    @Override
+    public void finish() {
+        Log.v(logToken + ".finish()");
+        super.finish();
+    }
+
+    @Override
+    protected void onStop() {
+        Log.v(logToken + ".onStop()");
+        super.onStop();
+    }
+
+    @Override
+    protected void onStart() {
+        Log.v(logToken + ".onStart()");
+        super.onStart();
+    }
+
+    @Override
+    protected void onResume() {
+        Log.v(logToken + ".onResume()");
+        super.onResume();
+    }
+
+    @Override
+    protected void onRestart() {
+        Log.v(logToken + ".onRestart()");
+        super.onRestart();
     }
 }

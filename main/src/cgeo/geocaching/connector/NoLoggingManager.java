@@ -1,12 +1,13 @@
 package cgeo.geocaching.connector;
 
-import cgeo.geocaching.models.Image;
 import cgeo.geocaching.enumerations.StatusCode;
 import cgeo.geocaching.log.LogType;
+import cgeo.geocaching.log.ReportProblemType;
 import cgeo.geocaching.log.TrackableLog;
+import cgeo.geocaching.models.Image;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Calendar;
 import java.util.Collections;
@@ -21,8 +22,8 @@ class NoLoggingManager extends AbstractLoggingManager {
 
     @Override
     @NonNull
-    public LogResult postLog(@NonNull final LogType logType, @NonNull final Calendar date, @NonNull final String log, @Nullable final String logPassword, @NonNull final List<TrackableLog> trackableLogs) {
-        return new LogResult(StatusCode.LOG_POST_ERROR, "");
+    public LogResult postLog(@NonNull final LogType logType, @NonNull final Calendar date, @NonNull final String log, @Nullable final String logPassword, @NonNull final List<TrackableLog> trackableLogs, @NonNull final ReportProblemType reportProblem) {
+        return new LogResult(StatusCode.LOG_POST_ERROR, "", "");
     }
 
     @Override

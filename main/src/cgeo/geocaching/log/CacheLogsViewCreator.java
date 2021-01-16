@@ -5,20 +5,22 @@ import cgeo.geocaching.CgeoApplication;
 import cgeo.geocaching.R;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.storage.DataStore;
-import cgeo.geocaching.ui.UserActionsClickListener;
+import cgeo.geocaching.ui.UserClickListener;
+import cgeo.geocaching.ui.dialog.ContextMenuDialog;
 
-import org.apache.commons.lang3.StringUtils;
-
+import android.annotation.SuppressLint;
 import android.content.res.Resources;
 import android.view.View;
 import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 
 public class CacheLogsViewCreator extends LogsViewCreator {
     private final boolean allLogs;
@@ -57,6 +59,7 @@ public class CacheLogsViewCreator extends LogsViewCreator {
         addEmptyLogsHeader();
     }
 
+    @SuppressLint("SetTextI18n")
     private void addLogCountsHeader() {
         final Map<LogType, Integer> logCounts = getCache().getLogCounts();
         if (logCounts != null) {
@@ -70,13 +73,7 @@ public class CacheLogsViewCreator extends LogsViewCreator {
 
             if (!sortedLogCounts.isEmpty()) {
                 // sort the log counts by type id ascending. that way the FOUND, DNF log types are the first and most visible ones
-                Collections.sort(sortedLogCounts, new Comparator<Entry<LogType, Integer>>() {
-
-                    @Override
-                    public int compare(final Entry<LogType, Integer> logCountItem1, final Entry<LogType, Integer> logCountItem2) {
-                        return logCountItem1.getKey().compareTo(logCountItem2.getKey());
-                    }
-                });
+                Collections.sort(sortedLogCounts, (logCountItem1, logCountItem2) -> logCountItem1.getKey().compareTo(logCountItem2.getKey()));
 
                 final List<String> labels = new ArrayList<>(sortedLogCounts.size());
                 for (final Entry<LogType, Integer> pair : sortedLogCounts) {
@@ -99,6 +96,34 @@ public class CacheLogsViewCreator extends LogsViewCreator {
     }
 
     @Override
+    protected ContextMenuDialog extendContextMenu(final ContextMenuDialog ctxMenu, final LogEntry log) {
+        if (getCache().canShareLog(log)) {
+            ctxMenu.addItem(R.string.context_share_as_link, R.drawable.ic_menu_share, it -> getCache().shareLog(cacheDetailActivity, log));
+            ctxMenu.addItem(cacheDetailActivity.getString(R.string.cache_menu_browser),
+                    R.drawable.ic_menu_info_details, it -> getCache().openLogInBrowser(cacheDetailActivity, log));
+        }
+        if (isOfflineLog(log)) {
+            ctxMenu.addItem(R.string.cache_personal_note_edit, R.drawable.ic_menu_edit, it -> new EditOfflineLogListener(getCache(), cacheDetailActivity).onClick(null));
+        }
+        return ctxMenu;
+    }
+
+    @Override
+    protected String getServiceSpecificLogId(final LogEntry log) {
+        return getCache().getServiceSpecificLogId(log);
+    }
+
+    @Override
+    protected View.OnClickListener createOnLogClickListener(final LogViewHolder holder, final LogEntry log) {
+        if (isOfflineLog(log)) {
+            return new EditOfflineLogListener(getCache(), cacheDetailActivity);
+        }
+        return super.createOnLogClickListener(holder, log);
+    }
+
+
+
+        @Override
     protected void fillCountOrLocation(final LogViewHolder holder, final LogEntry log) {
         // finds count
         if (log.found == -1) {
@@ -114,7 +139,6 @@ public class CacheLogsViewCreator extends LogsViewCreator {
         super.fillViewHolder(convertView, holder, log);
         if (isOfflineLog(log)) {
             holder.author.setOnClickListener(new EditOfflineLogListener(getCache(), cacheDetailActivity));
-            holder.text.setOnClickListener(new EditOfflineLogListener(getCache(), cacheDetailActivity));
             holder.marker.setVisibility(View.VISIBLE);
             holder.marker.setImageResource(R.drawable.mark_orange);
         }
@@ -135,8 +159,9 @@ public class CacheLogsViewCreator extends LogsViewCreator {
     }
 
     @Override
-    protected UserActionsClickListener createUserActionsListener() {
-        return new UserActionsClickListener(getCache());
+    protected UserClickListener createUserActionsListener(final LogEntry log) {
+        final String userName = StringEscapeUtils.unescapeHtml4(log.author);
+        return UserClickListener.forUser(getCache(), userName, userName, log.authorGuid);
     }
 
 }

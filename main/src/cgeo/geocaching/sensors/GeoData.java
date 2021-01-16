@@ -4,13 +4,17 @@ import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.settings.Settings;
 import cgeo.geocaching.utils.Log;
 
-import org.apache.commons.lang3.StringUtils;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class GeoData extends Location {
 
@@ -34,7 +38,7 @@ public class GeoData extends Location {
     }
 
     @Nullable
-    static Location best(@Nullable final Location gpsLocation, @Nullable final Location netLocation) {
+    static Location determineBestLocation(@Nullable final Location gpsLocation, @Nullable final Location netLocation) {
         if (gpsLocation == null) {
             return netLocation;
         }
@@ -72,10 +76,16 @@ public class GeoData extends Location {
         final LocationManager geoManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
         if (geoManager != null) {
             try {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                        && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    // we do not have permission to access the location of the user, therefore we return a dummy location
+                    return DUMMY_LOCATION;
+                }
+
                 // Try to find a sensible initial location from the last locations known to Android.
                 final Location lastGpsLocation = geoManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
                 final Location lastNetworkLocation = geoManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                final Location bestLocation = best(lastGpsLocation, lastNetworkLocation);
+                final Location bestLocation = determineBestLocation(lastGpsLocation, lastNetworkLocation);
                 if (bestLocation != null) {
                     bestLocation.setProvider(INITIAL_PROVIDER);
                     return new GeoData(bestLocation);
@@ -104,6 +114,10 @@ public class GeoData extends Location {
         }
         Log.i("No last known location nor home location available");
         return null;
+    }
+
+    public static boolean isArtificialLocationProvider(final String provider) {
+        return provider.equals(INITIAL_PROVIDER) || provider.equals(HOME_PROVIDER);
     }
 
 }

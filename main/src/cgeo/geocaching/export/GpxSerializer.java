@@ -1,5 +1,6 @@
 package cgeo.geocaching.export;
 
+import cgeo.geocaching.connector.gc.GCUtils;
 import cgeo.geocaching.enumerations.CacheAttribute;
 import cgeo.geocaching.enumerations.LoadFlags;
 import cgeo.geocaching.location.Geopoint;
@@ -15,10 +16,11 @@ import cgeo.geocaching.utils.TextUtils;
 import cgeo.geocaching.utils.XmlUtils;
 import cgeo.org.kxml2.io.KXmlSerializer;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -27,7 +29,6 @@ import java.util.Locale;
 import java.util.Set;
 
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.CharEncoding;
 import org.apache.commons.lang3.StringUtils;
 import org.xmlpull.v1.XmlSerializer;
 
@@ -77,8 +78,9 @@ public final class GpxSerializer {
 
         this.progressListener = progressListener;
         gpx.setOutput(writer);
+        gpx.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true);
 
-        gpx.startDocument(CharEncoding.UTF_8, true);
+        gpx.startDocument(StandardCharsets.UTF_8.name(), true);
         gpx.setPrefix(PREFIX_GPX, NS_GPX);
         gpx.setPrefix(PREFIX_XSI, NS_XSI);
         gpx.setPrefix(PREFIX_GROUNDSPEAK, NS_GROUNDSPEAK);
@@ -171,9 +173,43 @@ public final class GpxSerializer {
         gpx.endTag(NS_GSAK, "wptExtension");
     }
 
+    private void writeGsakExtensions(@NonNull final Waypoint waypoint) throws IOException {
+        gpx.startTag(NS_GSAK, "wptExtension");
+
+        gpx.startTag(NS_GSAK, "Parent");
+        gpx.text(waypoint.getGeocode());
+        gpx.endTag(NS_GSAK, "Parent");
+
+        if (waypoint.isUserDefined()) {
+            gpx.startTag(NS_GSAK, "Child_ByGSAK");
+            gpx.text("true");
+            gpx.endTag(NS_GSAK, "Child_ByGSAK");
+        }
+
+        gpx.endTag(NS_GSAK, "wptExtension");
+    }
+
+    private void writeCGeoAttributes(@NonNull final Waypoint waypoint) throws IOException {
+        if (waypoint.isVisited()) {
+            gpx.startTag(NS_CGEO, "visited");
+            gpx.text("true");
+            gpx.endTag(NS_CGEO, "visited");
+        }
+        if (waypoint.isUserDefined()) {
+            gpx.startTag(NS_CGEO, "userdefined");
+            gpx.text("true");
+            gpx.endTag(NS_CGEO, "userdefined");
+        }
+        if (waypoint.getCoords() == null || waypoint.isOriginalCoordsEmpty()) {
+            gpx.startTag(NS_CGEO, "originalCoordsEmpty");
+            gpx.text("true");
+            gpx.endTag(NS_CGEO, "originalCoordsEmpty");
+        }
+    }
+
     /**
      * @return XML schema compliant boolean representation of the boolean flag. This must be either true, false, 0 or 1,
-     *         but no other value (also not upper case True/False).
+     * but no other value (also not upper case True/False).
      */
     private static String gpxBoolean(final boolean boolFlag) {
         return boolFlag ? "true" : "false";
@@ -219,33 +255,30 @@ public final class GpxSerializer {
      * Writes one waypoint entry for cache waypoint.
      */
     private void writeCacheWaypoint(@NonNull final Waypoint wp) throws IOException {
+        gpx.startTag(NS_GPX, "wpt");
+
         final Geopoint coords = wp.getCoords();
-        // TODO: create some extension to GPX to include waypoint without coords
         if (coords != null) {
-            gpx.startTag(NS_GPX, "wpt");
             gpx.attribute("", "lat", Double.toString(coords.getLatitude()));
             gpx.attribute("", "lon", Double.toString(coords.getLongitude()));
-            final String waypointTypeGpx = wp.getWaypointType().gpx;
-            XmlUtils.multipleTexts(gpx, NS_GPX, "name", wp.getGpxId(), "cmt", wp.getNote(), "desc", wp.getName(), "sym", waypointTypeGpx, "type", "Waypoint|" + waypointTypeGpx);
-            // add parent reference the GSAK-way
-            gpx.startTag(NS_GSAK, "wptExtension");
-            gpx.startTag(NS_GSAK, "Parent");
-            gpx.text(wp.getGeocode());
-            gpx.endTag(NS_GSAK, "Parent");
-            gpx.endTag(NS_GSAK, "wptExtension");
-
-            if (wp.isVisited()) {
-                gpx.startTag(NS_CGEO, "visited");
-                gpx.text("true");
-                gpx.endTag(NS_CGEO, "visited");
-            }
-            if (wp.isUserDefined()) {
-                gpx.startTag(NS_CGEO, "userdefined");
-                gpx.text("true");
-                gpx.endTag(NS_CGEO, "userdefined");
-            }
-            gpx.endTag(NS_GPX, "wpt");
+        } else {
+            // coords are required information
+            // "xsi:nil" is not supported by schema, hence use 0/0 as OKAPI does.
+            gpx.attribute("", "lat", Double.toString(0.0));
+            gpx.attribute("", "lon", Double.toString(0.0));
         }
+
+        final String waypointTypeGpx = wp.getWaypointType().gpx;
+        // combine note and user note with SEPARATOR "\n--\n"
+        final String waypointNote = wp.getCombinedNoteAndUserNote();
+        XmlUtils.multipleTexts(gpx, NS_GPX, "name", wp.getGpxId(), "cmt", waypointNote, "desc", wp.getName(), "sym", waypointTypeGpx, "type", "Waypoint|" + waypointTypeGpx);
+
+        // add parent reference the GSAK-way
+        writeGsakExtensions(wp);
+        // add specific cgeo-attributes
+        writeCGeoAttributes(wp);
+
+        gpx.endTag(NS_GPX, "wpt");
     }
 
     private void writeLogs(@NonNull final Geocache cache) throws IOException {
@@ -257,9 +290,21 @@ public final class GpxSerializer {
 
         for (final LogEntry log : logs) {
             gpx.startTag(NS_GROUNDSPEAK, "log");
-            gpx.attribute("", "id", Integer.toString(log.id));
 
-            XmlUtils.multipleTexts(gpx, NS_GROUNDSPEAK, "date", dateFormatZ.format(new Date(log.date)), "type", log.getType().type);
+            String logId = cache.getServiceSpecificLogId(log);
+            //GC.Com-specifics
+            final long gcLogId = GCUtils.logCodeToLogId(logId);
+            if (gcLogId > 0) {
+                logId = Long.toString(gcLogId);
+            }
+            //fall back to internal id if we have no service-specific id
+            if (StringUtils.isBlank(logId)) {
+                logId = Integer.toString(log.id);
+            }
+
+           gpx.attribute("", "id", logId);
+
+            XmlUtils.multipleTexts(gpx, NS_GROUNDSPEAK, "date", dateFormatZ.format(new Date(log.date)), "type", log.logType.type);
 
             gpx.startTag(NS_GROUNDSPEAK, "finder");
             gpx.attribute("", "id", "");

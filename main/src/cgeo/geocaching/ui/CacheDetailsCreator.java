@@ -8,12 +8,10 @@ import cgeo.geocaching.log.LogType;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.models.ICoordinates;
 import cgeo.geocaching.models.Waypoint;
+import cgeo.geocaching.network.SmileyImage;
 import cgeo.geocaching.sensors.Sensors;
 import cgeo.geocaching.utils.Formatter;
-
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import android.support.annotation.NonNull;
+import cgeo.geocaching.utils.UnknownTagsHandler;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -24,11 +22,15 @@ import android.widget.RatingBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.core.text.HtmlCompat;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import butterknife.ButterKnife;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 
 // TODO The suppression of this lint finding is bad. But to fix it, someone needs to rework the layout of the cache
 // details also, not just only change the code here.
@@ -53,11 +55,32 @@ public final class CacheDetailsCreator {
      * @return a pair made of the whole "name: value" line (to be able to hide it for example) and of the value (to update it)
      */
     public ImmutablePair<RelativeLayout, TextView> add(final int nameId, final CharSequence value) {
+        final ImmutablePair<RelativeLayout, TextView> nameValue = createNameValueLine(nameId);
+        nameValue.getRight().setText(value);
+        return nameValue;
+    }
+
+    /**
+     * Create a "name: value" line with html content.
+     *
+     * @param nameId the resource of the name field
+     * @param value the initial value
+     * @param geocode the geocode for image getter
+     * @return a pair made of the whole "name: value" line (to be able to hide it for example) and of the value (to update it)
+     */
+    public ImmutablePair<RelativeLayout, TextView> addHtml(final int nameId, final CharSequence value, final String geocode) {
+        final ImmutablePair<RelativeLayout, TextView> nameValue = createNameValueLine(nameId);
+        final TextView valueView = nameValue.getRight();
+        valueView.setText(HtmlCompat.fromHtml(value.toString(), HtmlCompat.FROM_HTML_MODE_LEGACY, new SmileyImage(geocode, valueView), new UnknownTagsHandler()), TextView.BufferType.SPANNABLE);
+        return nameValue;
+    }
+
+    @NonNull
+    private ImmutablePair<RelativeLayout, TextView> createNameValueLine(final int nameId) {
         final RelativeLayout layout = (RelativeLayout) activity.getLayoutInflater().inflate(R.layout.cache_information_item, null, false);
-        final TextView nameView = ButterKnife.findById(layout, R.id.name);
+        final TextView nameView = layout.findViewById(R.id.name);
         nameView.setText(res.getString(nameId));
-        final TextView valueView = ButterKnife.findById(layout, R.id.value);
-        valueView.setText(value);
+        final TextView valueView = layout.findViewById(R.id.value);
         parentView.addView(layout);
         return ImmutablePair.of(layout, valueView);
     }
@@ -68,13 +91,13 @@ public final class CacheDetailsCreator {
 
     private RelativeLayout addStars(final int nameId, final float value, final int max) {
         final RelativeLayout layout = (RelativeLayout) activity.getLayoutInflater().inflate(R.layout.cache_information_item, null, false);
-        final TextView nameView = ButterKnife.findById(layout, R.id.name);
-        final TextView valueView = ButterKnife.findById(layout, R.id.value);
+        final TextView nameView = layout.findViewById(R.id.name);
+        final TextView valueView = layout.findViewById(R.id.value);
 
         nameView.setText(activity.getString(nameId));
-        valueView.setText(String.format(Locale.getDefault(), "%.1f", value) + ' ' + activity.getString(R.string.cache_rating_of) + ' ' + String.format(Locale.getDefault(), "%d", max));
+        valueView.setText(String.format(Locale.getDefault(), activity.getString(R.string.cache_rating_of_new), value, max));
 
-        final RatingBar layoutStars = ButterKnife.findById(layout, R.id.stars);
+        final RatingBar layoutStars = layout.findViewById(R.id.stars);
         layoutStars.setNumStars(max);
         layoutStars.setRating(value);
         layoutStars.setVisibility(View.VISIBLE);
@@ -93,6 +116,8 @@ public final class CacheDetailsCreator {
         }
         if (cache.isFound()) {
             states.add(res.getString(R.string.cache_status_found) + date);
+        } else if (cache.isDNF()) {
+            states.add(res.getString(R.string.cache_not_status_found) + date);
         }
         if (cache.isEventCache() && states.isEmpty()) {
             for (final LogEntry log : cache.getLogs()) {
@@ -127,11 +152,12 @@ public final class CacheDetailsCreator {
         return Sensors.getInstance().currentGeo().getCoords().distanceTo(target);
     }
 
+    @SuppressLint("SetTextI18n")
     public void addRating(final Geocache cache) {
         if (cache.getRating() > 0) {
             final RelativeLayout itemLayout = addStars(R.string.cache_rating, cache.getRating());
             if (cache.getVotes() > 0) {
-                final TextView itemAddition = ButterKnife.findById(itemLayout, R.id.addition);
+                final TextView itemAddition = itemLayout.findViewById(R.id.addition);
                 itemAddition.setText(" (" + cache.getVotes() + ')');
                 itemAddition.setVisibility(View.VISIBLE);
             }

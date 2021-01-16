@@ -1,24 +1,24 @@
 package cgeo.geocaching.filter;
 
-import android.os.Parcel;
-import android.os.Parcelable;
-import android.support.annotation.NonNull;
-import android.util.Pair;
-
-import org.apache.commons.lang3.StringUtils;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-
 import cgeo.geocaching.R;
 import cgeo.geocaching.connector.ConnectorFactory;
 import cgeo.geocaching.location.Geopoint;
 import cgeo.geocaching.models.Geocache;
 import cgeo.geocaching.sensors.GeoData;
 import cgeo.geocaching.sensors.Sensors;
+
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.util.Pair;
+
+import androidx.annotation.NonNull;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+
+import org.apache.commons.text.similarity.LevenshteinDistance;
 
 public class MultiListingFilter extends AbstractFilter {
 
@@ -74,7 +74,7 @@ public class MultiListingFilter extends AbstractFilter {
     }
 
     private static boolean haveSimilarNames(final Geocache current, final Geocache next) {
-        return StringUtils.getLevenshteinDistance(current.getName(), next.getName()) < 3;
+        return LevenshteinDistance.getDefaultInstance().apply(current.getName(), next.getName()) < 3;
     }
 
     private static List<Pair<Float, Geocache>> getDistanceSortedCaches(final List<Geocache> list) {
@@ -88,13 +88,7 @@ public class MultiListingFilter extends AbstractFilter {
                 sorted.add(new Pair<>(distance, cache));
             }
         }
-        Collections.sort(sorted, new Comparator<Pair<Float, Geocache>>() {
-
-            @Override
-            public int compare(final Pair<Float, Geocache> lhs, final Pair<Float, Geocache> rhs) {
-                return Float.compare(lhs.first, rhs.first);
-            }
-        });
+        Collections.sort(sorted, (lhs, rhs) -> Float.compare(lhs.first, rhs.first));
         return sorted;
     }
 
